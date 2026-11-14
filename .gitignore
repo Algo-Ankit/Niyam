@@ -1,0 +1,22 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python environment, repo-local toolchain (uv, Python) and caches
+.venv/
+.tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Raw data (processed text is committed only if RBI's terms allow; decided in Phase 1)
+data/raw/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

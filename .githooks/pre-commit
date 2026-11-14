@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Blocks a commit unless lint, format and type checks pass.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+uv=".tools/bootstrap/Scripts/uv.exe"
+[[ -x "$uv" ]] || uv=".tools/bootstrap/bin/uv"
+[[ -x "$uv" ]] || uv="uv"
+
+"$uv" run --frozen ruff check .
+"$uv" run --frozen ruff format --check .
+"$uv" run --frozen mypy
+
+# Defence in depth on top of .gitignore: never let a secrets file be committed.
+staged_secrets=$(git diff --cached --name-only \
+  | grep -E '(^|/)\.env(\..+)?$' | grep -Ev '(^|/)\.env\.example$' || true)
+if [[ -n "$staged_secrets" ]]; then
+  echo "pre-commit: refusing to commit a .env file" >&2
+  exit 1
+fi

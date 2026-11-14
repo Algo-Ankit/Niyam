@@ -1,0 +1,58 @@
+[project]
+name = "niyam"
+version = "0.1.0"
+description = "Question answering over RBI payment regulations, with evaluation and monitoring."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv]
+# Keep every uv artefact inside the repo; never download a Python implicitly.
+cache-dir = ".tools/uv-cache"
+python-downloads = "manual"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",  # pycodestyle, pyflakes
+    "I",            # import order
+    "N",            # naming
+    "UP",           # modern syntax
+    "B",            # likely bugs
+    "SIM",          # simplifications
+    "S",            # security (bandit)
+    "RUF",          # ruff-specific
+    "PL",           # pylint subset
+    "ERA",          # commented-out code
+    "T20",          # stray print()
+]
+ignore = ["PLR2004"]  # magic-number rule is noisy for thresholds named in config
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["live: calls a real external provider (spends quota or money)"]
