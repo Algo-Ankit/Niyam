@@ -63,3 +63,25 @@ are bought; no-Jev mode needs the owner's approval.
 **D20. Neon direct (unpooled) connection string for now.** The pooled endpoint runs PgBouncer in
 transaction mode, which conflicts with server-side prepared statements and schema migrations.
 Revisit for the deployed app in Phase 4.
+
+**D21 (supersedes D5 for the decision model). `gemini-decision-1` replaces Jev.** The Vercel
+route to Jev returned HTTP 403 `customer_verification_required` (a card on file is needed to
+unlock the free credit). The owner chose not to add a card or buy credits. gemini-decision-1
+runs on the existing Gemini key, free tier, and answers many yes/no questions over one shared
+input in a single request (input billed once). *Tradeoff:* loses the Jev story; the
+`DecisionModel` interface stays provider-neutral so Jev can be added later as a second adapter.
+Env vars renamed: `DECISION_PROVIDER`, `DECISION_BUDGET_USD` (was `JEV_*`).
+
+**D22. Our own response cache only.** No provider-side context caching anywhere
+(gemini-4-hydrogen supports implicit caching only; the Decisions API supports none).
+
+**D23. Lowest thinking level (`low`) by default** for generation and the judge; raise only if
+Phase 3 evals justify it.
+
+**D24. Embeddings: `gemini-embedding-2` at 768 dimensions.** Fits pgvector's 2,000-dimension
+HNSW limit, auto-normalised by the provider. Each text is sent as its own `Content`, because a
+plain list is aggregated into one vector.
+
+**D25. Model stack composed as `Cached(Metered(Adapter))`.** Cache hits never consume quota.
+`Meter` enforces daily quota (Pacific quota day), budget, per-minute limits, and stops on the
+first 429 (`max_rate_limit_retries=0`) until free-tier limits are confirmed from AI Studio.

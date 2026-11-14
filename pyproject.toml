@@ -5,7 +5,16 @@ description = "Question answering over RBI payment regulations, with evaluation 
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "google-genai>=3.3.0",
+    "langfuse>=5.2.0",
+    "psycopg[binary]>=3.3.9",
+    "pydantic-settings>=2.16.3",
+    "tzdata>=2026.6",
+]
+
+[project.scripts]
+niyam = "niyam.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13,<0.14"]
@@ -18,6 +27,7 @@ python-downloads = "manual"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
@@ -45,14 +55,15 @@ select = [
 ignore = ["PLR2004"]  # magic-number rule is noisy for thresholds named in config
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004"]
+"tests/**" = ["S101"]
+"src/niyam/cli.py" = ["T201"]  # the CLI's job is to print
 
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["src"]
+files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 addopts = "-ra --strict-markers"
-markers = ["live: calls a real external provider (spends quota or money)"]

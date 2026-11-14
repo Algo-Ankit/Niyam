@@ -11,6 +11,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+# Local response cache and cost/quota ledger
+.state/
 
 # Raw data (processed text is committed only if RBI's terms allow; decided in Phase 1)
 data/raw/
