@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import psycopg
 from langfuse import Langfuse
+from langfuse.api import AccessDeniedError, UnauthorizedError
 from pydantic import BaseModel
 
 from niyam.config import Settings
@@ -124,6 +125,12 @@ def _check_langfuse(settings: Settings) -> str:
     try:
         if not client.auth_check():
             raise AssertionError("credentials rejected")
+    except (UnauthorizedError, AccessDeniedError) as error:
+        # The SDK's own message starts with a header dump; say what to check instead.
+        raise AssertionError(
+            "credentials rejected: check that LANGFUSE_PUBLIC_KEY starts with pk-lf-, "
+            "LANGFUSE_SECRET_KEY with sk-lf-, and LANGFUSE_HOST matches the project's region"
+        ) from error
     finally:
         client.shutdown()
     return f"authenticated against {settings.langfuse_host}"
