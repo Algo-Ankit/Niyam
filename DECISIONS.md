@@ -203,3 +203,20 @@ documents and a hand-written idea set, both owner-reviewed.
 keeps it honest. *Tradeoff:* the register and seeded defects are hand-built, and one document
 check needs about 20 to 30 judgments, so per-obligation judging goes to the decision model
 (10K RPD) and only the summary to the generator (500 RPD). Not legal advice; US consumer payments only.
+
+**D40. The product is a bank and card dispute assistant.** Owner-approved on 2026-11-15.
+Supersedes D39. Input: a consumer's account of a disputed transaction (what happened, dates,
+account type). Output, always the same shape: which rule applies (Reg E or Reg Z billing error)
+with the paragraph cited, the consumer's maximum liability, the consumer's and the bank's
+deadlines as dates, a dispute letter citing the regulation, and a "not covered" list (authorized
+push-payment scams, state law, AML). The model only extracts facts; liability and deadlines are
+computed by deterministic code; retrieval supplies the cited text. Corpus: 12 CFR 1005 and
+1026.2, 1026.12, 1026.13, each with Supplement I. CFPB Reg E FAQs and Consumer Complaint
+Database narratives are test data only, never indexed. Evaluated per stage: extraction (labelled
+narratives), routing (complaint product labels), rules engine (pytest from regulation examples),
+retrieval recall@k and MRR (gold paragraph from the rules engine and FAQ citations), grounding
+and FAQ agreement (judge, calibrated on about 30 owner labels), abstention, and a deterministic
+letter checklist.
+*Why:* a concrete user who is losing money, a fixed output, and gold data written by the
+regulator rather than by us. *Tradeoff:* complaint product labels are consumer-chosen and noisy;
+FAQ count and complaint-database terms are unverified. Legal information, not legal advice.
