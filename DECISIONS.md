@@ -311,3 +311,17 @@ the owner's delegation. Supersedes the fusion part of D45. On R4, vector search 
 eval as comparison arms; the tsvector column stays for them.
 *Why:* the measured best arm. *Tradeoff:* the eval set is builder-written and small (35
 questions), so the choice should be re-checked once the owner has reviewed the set.
+
+**D48. Eval sets sized by doubling to a cap; HyDE and k = 5 tested on a dev split.** Owner-approved
+on 2026-11-15. Three sets, each sized to answer its question: retrieval (60 dev questions for
+tuning; the 35 R4 questions become the held-out test split; cap 190), answer quality (40 dev
+questions with reference answers, judged by Gemma for correctness and grounding; cap 80), and
+the whole pipeline (40 scenarios, 30 in scope and 10 out of scope or unanswerable; cap 80). A
+set is doubled once, up to its cap, only if the 95% paired-bootstrap interval on the comparison
+that matters includes zero; caps are fixed before the first run. Retrieval arms: vector,
+HyDE (the generator writes a hypothetical regulation passage, embedded as a document) and the
+two fused by reciprocal rank; the dev winner is confirmed once on the test split. The assistant
+retrieves k = 5. Gold is builder-written and paragraph-anchored; judge scores stay uncalibrated
+until the owner labels 30 verdicts.
+*Why:* enough items to separate the arms without overkill. *Tradeoff:* about 180 generator
+requests per full run of 500 per day; partly self-graded until owner review.

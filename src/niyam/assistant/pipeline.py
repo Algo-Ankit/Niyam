@@ -33,6 +33,7 @@ NOT_COVERED = (
     "covered. Your DSO (school international student adviser) or an immigration attorney can help."
 )
 DISCLAIMER = "Information from 8 CFR 214.2(f), not legal advice. Confirm deadlines with your DSO."
+RETRIEVAL_K = 5
 _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _WORD_DATE = re.compile(
     r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.? \d{1,2}\b"
@@ -59,7 +60,7 @@ class Reply:
     extraction: Extraction
     assessment: Assessment
     provisions: tuple[Hit, ...]
-    explanation: Explanation | None  # None when it failed the citation or date check
+    explanation: Explanation  # the generator's draft; shown only if rejected_reason is None
     rejected_reason: str | None
 
 
@@ -76,14 +77,29 @@ def answer(message: str, as_of: date, services: Services) -> Reply:
     extraction = extract(message, as_of, generator, level)
     assessment = assess(extraction.facts, as_of)
     provisions = _provisions(services.conn, services.embedder, extraction.question, assessment)
-    explanation = _generate(
-        generator,
-        _explanation_prompt(extraction.question, assessment, provisions),
-        Explanation,
-        level,
-    )
-    reason = check_explanation(explanation, assessment, provisions)
-    return Reply(extraction, assessment, provisions, None if reason else explanation, reason)
+    explanation = explain(extraction.question, assessment, provisions, generator, level)
+    given = fact_dates(extraction.facts) | {as_of.isoformat()}
+    reason = check_explanation(explanation, assessment, provisions, given)
+    return Reply(extraction, assessment, provisions, explanation, reason)
+
+
+def explain(
+    question: str,
+    assessment: Assessment,
+    provisions: tuple[Hit, ...],
+    generator: GenerativeModel,
+    thinking_level: ThinkingLevel | None,
+) -> Explanation:
+    """The generator's answer, using only `provisions` and the computed findings."""
+    prompt = _explanation_prompt(question, assessment, provisions)
+    return _generate(generator, prompt, Explanation, thinking_level)
+
+
+def fact_dates(facts: StudentFacts) -> frozenset[str]:
+    """Every date the student gave, in ISO form; an explanation may repeat these."""
+    dates = [getattr(facts, name) for name in StudentFacts.model_fields if name != "jobs"]
+    dates += [d for job in facts.jobs for d in (job.start, job.end)]
+    return frozenset(d.isoformat() for d in dates if isinstance(d, date))
 
 
 def extract(
@@ -94,9 +110,15 @@ def extract(
 
 
 def check_explanation(
-    explanation: Explanation, assessment: Assessment, provisions: tuple[Hit, ...]
+    explanation: Explanation,
+    assessment: Assessment,
+    provisions: tuple[Hit, ...],
+    given_dates: frozenset[str] = frozenset(),
 ) -> str | None:
-    """Why the explanation must not be shown, or None if every citation and date is grounded."""
+    """Why the explanation must not be shown, or None if every citation and date is grounded.
+
+    Allowed dates: those the rules engine computed and those the student gave (`given_dates`).
+    """
     allowed = {p.citation for p in provisions}
     invented = [c for c in explanation.citations if c not in allowed]
     if invented:
@@ -105,6 +127,7 @@ def check_explanation(
         d.isoformat() for f in assessment.findings for d in (f.opens, f.closes) if d is not None
     }
     known_dates |= set(_ISO_DATE.findall(" ".join(f.summary for f in assessment.findings)))
+    known_dates |= given_dates
     if word_dates := _WORD_DATE.findall(explanation.explanation):
         return f"stated dates in a form that cannot be checked: {word_dates}"
     unknown = sorted(set(_ISO_DATE.findall(explanation.explanation)) - known_dates)
@@ -116,7 +139,7 @@ def check_explanation(
 def _provisions(
     conn: psycopg.Connection, embedder: Embedder, question: str, assessment: Assessment
 ) -> tuple[Hit, ...]:
-    hits = search(conn, embedder, question, k=6)
+    hits = search(conn, embedder, question, k=RETRIEVAL_K)
     cited = [f.citation for f in assessment.findings]
     seen = {h.citation for h in hits}
     extra = by_citation(conn, [c for c in dict.fromkeys(cited) if c not in seen])
@@ -139,7 +162,6 @@ def _explanation_prompt(question: str, assessment: Assessment, provisions: tuple
         {"rule": f.rule, "citation": f.citation, "summary": f.summary, "status": f.status}
         for f in assessment.findings
     ]
-    passages = "\n\n".join(f"[{p.citation}]\n{p.body}" for p in provisions)
     return (
         "You explain US F-1 student rules. Answer the question using ONLY the provisions below "
         "and the computed findings. Rules: cite provisions by their exact bracketed citation; "
@@ -147,8 +169,13 @@ def _explanation_prompt(question: str, assessment: Assessment, provisions: tuple
         "YYYY-MM-DD form); if the provisions do not answer the question, set answerable to "
         "false and say what is missing; do not give legal advice.\n\n"
         f"Question: {question}\n\nComputed findings (authoritative):\n"
-        f"{json.dumps(findings, indent=1)}\n\nProvisions:\n{passages}"
+        f"{json.dumps(findings, indent=1)}\n\nProvisions:\n{format_provisions(provisions)}"
     )
+
+
+def format_provisions(provisions: tuple[Hit, ...]) -> str:
+    """Provisions as the generator and judge see them: bracketed citation, then the text."""
+    return "\n\n".join(f"[{p.citation}]\n{p.body}" for p in provisions)
 
 
 def _generate[T: BaseModel](

@@ -55,13 +55,13 @@ def score(item: Item, extraction: Extraction) -> Score:
     wrong = [f for f in SCALAR_FIELDS if getattr(got, f) != getattr(item.facts, f)]
     if _job_spans(got) != _job_spans(item.facts):
         wrong.append("jobs")
-    gold = _findings(item.facts, item.as_of)
+    gold = findings_signature(item.facts, item.as_of)
     return Score(
         item.id,
         tuple(wrong),
         frozenset(extraction.out_of_scope) == item.out_of_scope,
         bool(gold),
-        _findings(got, item.as_of) == gold,
+        findings_signature(got, item.as_of) == gold,
     )
 
 
@@ -84,7 +84,7 @@ def _job_spans(facts: StudentFacts) -> list[tuple[date, date | None]]:
     return sorted((job.start, job.end) for job in facts.jobs)
 
 
-def _findings(facts: StudentFacts, as_of: date) -> list[tuple[str, str, str]]:
+def findings_signature(facts: StudentFacts, as_of: date) -> list[tuple[str, str, str]]:
     """Each finding's rule, status and summary (which carries every date and day count).
 
     Employer names are blanked first: they appear in summaries but never change a number.

@@ -1,6 +1,6 @@
 from datetime import date
 
-from niyam.assistant.pipeline import Explanation, check_explanation
+from niyam.assistant.pipeline import Explanation, check_explanation, fact_dates
 from niyam.retrieval.store import Hit
 from niyam.rules.opt import StudentFacts, assess
 
@@ -39,3 +39,10 @@ def test_dates_written_in_words_are_rejected_because_they_cannot_be_checked() ->
             _explanation(text, ["8 CFR 214.2(f)(11)(i)(B)(2)"]), _ASSESSMENT, _PROVISIONS
         )
         assert reason is not None and "cannot be checked" in reason
+
+
+def test_dates_the_student_gave_may_be_repeated() -> None:
+    explanation = _explanation("Your program ended 2026-05-15.", ["8 CFR 214.2(f)(11)(i)(B)(2)"])
+    given = fact_dates(StudentFacts(program_end_date=date(2026, 5, 15)))
+    assert check_explanation(explanation, _ASSESSMENT, _PROVISIONS, given) is None
+    assert check_explanation(explanation, _ASSESSMENT, _PROVISIONS) is not None

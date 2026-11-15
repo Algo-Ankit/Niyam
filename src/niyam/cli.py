@@ -14,16 +14,21 @@ import psycopg
 from niyam.assistant import pipeline
 from niyam.config import get_settings
 from niyam.corpus import build, download
+from niyam.evals import answers as answers_eval
+from niyam.evals import end_to_end
 from niyam.evals import extraction as extraction_eval
 from niyam.evals import retrieval as retrieval_eval
 from niyam.models.factory import build_models
+from niyam.retrieval import hyde as hyde_search
 from niyam.retrieval import store
 from niyam.verify import run_checks
 
 RAW_TITLE_8 = Path("data/raw/ECFR-title8.xml")
 MANIFEST = Path("data/manifest.json")
 F1_CORPUS = Path("data/processed/8-cfr-214.2-f.json")
-RETRIEVAL_SET = Path("evals/retrieval.jsonl")
+RETRIEVAL_DEV_SET = Path("evals/retrieval-dev.jsonl")
+RETRIEVAL_TEST_SET = Path("evals/retrieval-test.jsonl")
+PIPELINE_SET = Path("evals/pipeline.jsonl")
 EXTRACTION_SET = Path("evals/extraction.jsonl")
 
 
@@ -96,7 +101,7 @@ def _ask(message: str, as_of: date) -> int:
         print()
         print(f"Tell me these to compute more deadlines: {', '.join(reply.assessment.missing)}")
     print()
-    if reply.explanation is not None:
+    if reply.rejected_reason is None:
         print(reply.explanation.explanation)
         print(f"Sources: {', '.join(reply.explanation.citations)}")
     else:
@@ -109,25 +114,41 @@ def _ask(message: str, as_of: date) -> int:
     return 0
 
 
-def _eval_retrieval(output: Path) -> int:
+def _eval_retrieval(output: Path, eval_set: Path, hyde: bool) -> int:
     settings = get_settings()
-    items = retrieval_eval.load_items(RETRIEVAL_SET)
+    items = retrieval_eval.load_items(eval_set)
+    level = settings.generation_thinking_level
     with closing(build_models(settings)) as models, _connect() as conn:
-        ranked = retrieval_eval.run(conn, models.embedder, items)
+        passage_for = (
+            (lambda q: hyde_search.hypothetical_passage(models.generator, q, level))
+            if hyde
+            else None
+        )
+        ranked = retrieval_eval.run(conn, models.embedder, items, passage_for)
     scores = retrieval_eval.metrics(ranked)
-    report = {
-        "run_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "commit": _commit(),
-        "eval_set": RETRIEVAL_SET.as_posix(),
-        "items": len(items),
-        "embedding_model": settings.embedding_model,
-        "metrics": scores,
-        "rankings": [asdict(r) for r in ranked],
+    versus_vector = {
+        arm: {name: asdict(interval) for name, interval in by_metric.items()}
+        for arm, by_metric in retrieval_eval.comparisons(ranked).items()
     }
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    _save(
+        output,
+        eval_set,
+        embedding_model=settings.embedding_model,
+        generation_model=settings.generation_model if hyde else None,
+        metrics=scores,
+        versus_vector=versus_vector,
+        rankings=[asdict(r) for r in ranked],
+    )
     for arm, values in scores.items():
-        print(f"{arm:<8} " + "  ".join(f"{name}={value:.3f}" for name, value in values.items()))
+        print(f"{arm:<12} " + "  ".join(f"{name}={value:.3f}" for name, value in values.items()))
+    for arm, by_metric in versus_vector.items():
+        print(
+            f"{arm:<12} minus vector: "
+            + "  ".join(
+                f"{name} {i['mean']:+.3f} [{i['low']:+.3f}, {i['high']:+.3f}]"
+                for name, i in by_metric.items()
+            )
+        )
     print(f"{len(items)} questions; raw output in {output}")
     return 0
 
@@ -140,25 +161,82 @@ def _eval_extraction(output: Path) -> int:
         extractions = [pipeline.extract(i.message, i.as_of, models.generator, level) for i in items]
     scores = [extraction_eval.score(i, e) for i, e in zip(items, extractions, strict=True)]
     totals = extraction_eval.summary(scores)
-    report = {
-        "run_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "commit": _commit(),
-        "eval_set": EXTRACTION_SET.as_posix(),
-        "items": len(items),
-        "generation_model": settings.generation_model,
-        "thinking_level": level,
-        "summary": totals,
-        "scores": [asdict(s) for s in scores],
-        "extractions": [e.model_dump(mode="json") for e in extractions],
-    }
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    _save(
+        output,
+        EXTRACTION_SET,
+        generation_model=settings.generation_model,
+        thinking_level=level,
+        summary=totals,
+        scores=[asdict(s) for s in scores],
+        extractions=[e.model_dump(mode="json") for e in extractions],
+    )
     print("  ".join(f"{name}={value}" for name, value in totals.items()))
     for s in scores:
         if s.wrong_fields or not s.out_of_scope_correct or not s.deadlines_agree:
             print(f"  {s.id}: wrong={list(s.wrong_fields)} scope_ok={s.out_of_scope_correct}")
     print(f"{len(items)} messages; raw output in {output}")
     return 0
+
+
+def _eval_answers(output: Path) -> int:
+    settings = get_settings()
+    items = answers_eval.load_items(RETRIEVAL_DEV_SET)
+    hits = answers_eval.corpus_hits(F1_CORPUS)
+    level = settings.generation_thinking_level
+    with closing(build_models(settings)) as models:
+        scores = [
+            answers_eval.evaluate(i, hits, models.generator, models.judge, level) for i in items
+        ]
+    totals = answers_eval.summary(scores)
+    _save(
+        output,
+        RETRIEVAL_DEV_SET,
+        generation_model=settings.generation_model,
+        judge_model=settings.judge_model,
+        summary=totals,
+        scores=[asdict(s) for s in scores],
+    )
+    print("  ".join(f"{name}={value}" for name, value in totals.items()))
+    print(f"{len(items)} questions; raw output in {output}")
+    return 0
+
+
+def _eval_pipeline(output: Path) -> int:
+    settings = get_settings()
+    scenarios = end_to_end.load_scenarios(PIPELINE_SET)
+    with closing(build_models(settings)) as models, _connect() as conn:
+        services = pipeline.Services(
+            models.generator, models.embedder, conn, settings.generation_thinking_level
+        )
+        scores = [
+            end_to_end.evaluate(s, pipeline.answer(s.message, s.as_of, services), models.judge)
+            for s in scenarios
+        ]
+    totals = end_to_end.summary(scores)
+    _save(
+        output,
+        PIPELINE_SET,
+        generation_model=settings.generation_model,
+        judge_model=settings.judge_model,
+        retrieval_k=pipeline.RETRIEVAL_K,
+        summary=totals,
+        scores=[asdict(s) for s in scores],
+    )
+    print("  ".join(f"{name}={value}" for name, value in totals.items()))
+    print(f"{len(scenarios)} scenarios; raw output in {output}")
+    return 0
+
+
+def _save(output: Path, eval_set: Path, **fields: object) -> None:
+    """Write a raw eval report with the run time, commit and eval set it came from."""
+    report = {
+        "run_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "commit": _commit(),
+        "eval_set": eval_set.as_posix(),
+        **fields,
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
 
 
 def _commit() -> str:
@@ -182,10 +260,16 @@ def main() -> None:
     commands.add_parser("corpus-fetch", help="download the eCFR title 8 XML from govinfo")
     commands.add_parser("corpus-build", help="parse 8 CFR 214.2(f) into the processed corpus")
     commands.add_parser("index", help="embed the processed corpus and load it into Postgres")
-    search = commands.add_parser("search", help="hybrid search over the indexed provisions")
+    search = commands.add_parser("search", help="search the indexed provisions")
     search.add_argument("query")
-    evaluate = commands.add_parser("eval-retrieval", help="score retrieval arms on the eval set")
+    evaluate = commands.add_parser("eval-retrieval", help="score retrieval arms on an eval set")
     evaluate.add_argument("output", type=Path, help="where to save the raw JSON report")
+    evaluate.add_argument("--set", type=Path, default=RETRIEVAL_DEV_SET, dest="eval_set")
+    evaluate.add_argument("--hyde", action="store_true", help="add the HyDE arms (1 call each)")
+    answers = commands.add_parser("eval-answers", help="score answers given the gold provisions")
+    answers.add_argument("output", type=Path, help="where to save the raw JSON report")
+    whole = commands.add_parser("eval-pipeline", help="score the whole assistant on scenarios")
+    whole.add_argument("output", type=Path, help="where to save the raw JSON report")
     evaluate_x = commands.add_parser("eval-extraction", help="score fact extraction end to end")
     evaluate_x.add_argument("output", type=Path, help="where to save the raw JSON report")
     ask = commands.add_parser("ask", help="answer an F-1 student's question")
@@ -204,7 +288,11 @@ def main() -> None:
     if args.command == "search":
         sys.exit(_search(args.query))
     if args.command == "eval-retrieval":
-        sys.exit(_eval_retrieval(args.output))
+        sys.exit(_eval_retrieval(args.output, args.eval_set, args.hyde))
+    if args.command == "eval-answers":
+        sys.exit(_eval_answers(args.output))
+    if args.command == "eval-pipeline":
+        sys.exit(_eval_pipeline(args.output))
     if args.command == "eval-extraction":
         sys.exit(_eval_extraction(args.output))
     if args.command == "ask":

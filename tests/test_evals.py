@@ -29,7 +29,7 @@ def test_metrics_average_over_items_per_arm() -> None:
 def test_every_gold_paragraph_in_the_eval_set_exists_and_has_text() -> None:
     corpus = json.loads((_ROOT / "data/processed/8-cfr-214.2-f.json").read_text(encoding="utf-8"))
     indexed = {p["citation"] for p in corpus["provisions"] if p["text"]}
-    items = load_items(_ROOT / "evals/retrieval.jsonl")
+    items = load_items(_ROOT / "evals/retrieval-test.jsonl")
     assert len({i.id for i in items}) == len(items) == 35
     missing = {g for i in items for g in i.gold} - indexed
     assert not missing, missing
