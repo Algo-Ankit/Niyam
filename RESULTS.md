@@ -66,3 +66,27 @@ Format:
 - Produced by: `uv run niyam eval-extraction results/extraction-eval-3.json` at commit a5c2d6f
 - Config: as R5; the prompt change means no cached responses were reused.
 - Raw output: results/extraction-eval-3.json
+
+## R7 2026-11-15 - Retrieval dev split (60 questions), five arms including HyDE
+- Value: hit@1 / hit@3 / hit@5 / MRR@10. keyword 0.183 / 0.383 / 0.500 / 0.327; vector
+  0.900 / 0.967 / 0.967 / 0.936; hybrid 0.500 / 0.667 / 0.783 / 0.615; hyde 0.817 / 0.917 /
+  0.950 / 0.875; vector+hyde 0.867 / 1.000 / 1.000 / 0.925. Paired 95% bootstrap, arm minus
+  vector: hyde hit@1 -0.083 [-0.200, +0.033]; vector+hyde hit@1 -0.033 [-0.117, +0.033], hit@5
+  +0.033 [0.000, +0.083].
+- Produced by: `uv run niyam eval-retrieval results/retrieval-dev-1.json --hyde` at commit
+  90af482 (hit@5 interval computed from the raw file with niyam.evals.stats.paired_bootstrap)
+- Config: gemini-embedding-2 (768); HyDE passages by gemini-3.5-flash-lite, thinking low,
+  embedded as documents; fusion is reciprocal rank (k = 60); 24 candidates per arm; 2,000
+  bootstrap resamples, seed 0. Set evals/retrieval-dev.jsonl, builder-written.
+- Raw output: results/retrieval-dev-1.json
+
+## R8 2026-11-15 - Retrieval held-out test split (35 questions), confirmation run
+- Value: keyword 0.086 / 0.343 / 0.514 / 0.271; vector 0.857 / 0.943 / 0.943 / 0.903 (same as
+  R4); hybrid 0.486 / 0.714 / 0.743 / 0.614; hyde 0.771 / 0.914 / 0.971 / 0.852; vector+hyde
+  0.800 / 0.971 / 1.000 / 0.888. vector+hyde minus vector: hit@1 -0.057 [-0.171, +0.057],
+  hit@5 +0.057 [0.000, +0.143]. Across both splits vector+hyde gained the gold paragraph in the
+  top 5 on 4 of 95 questions and lost it on none.
+- Produced by: `uv run niyam eval-retrieval results/retrieval-test-1.json --set
+  evals/retrieval-test.jsonl --hyde` at commit 90af482
+- Config: as R7. Set evals/retrieval-test.jsonl (the R4 questions), builder-written.
+- Raw output: results/retrieval-test-1.json
