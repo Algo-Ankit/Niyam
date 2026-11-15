@@ -38,7 +38,7 @@ Show me the full draft and wait for my approval before writing.
 - HANDOVER.md: a snapshot, updated only via /handover. Never append to it.
 
 ## Session Continuity
-- When I run /resume, ask to continue previous work, or send my first task request of a session (not a quick question), follow the steps in .claude/commands/resume.md before doing anything else. If HANDOVER.md does not exist, skip this silently and handle my request normally. Quick questions get answered directly.
+- /projectstatus reports where the project stands from HANDOVER.md and the logs. It does not restore a previous conversation. When I run /projectstatus, ask to continue previous work, or send my first task request of a session (not a quick question), follow the steps in .claude/commands/projectstatus.md before doing anything else. If HANDOVER.md does not exist, skip this silently and handle my request normally. Quick questions get answered directly.
 ```
 
 ## STEP 2: Write ./.claude/commands/handover.md with exactly this content:
@@ -67,7 +67,7 @@ Last line: "Records: DECISIONS.md latest #N, RESULTS.md latest R#N."
 Rules: facts only, no padding, no metrics without a RESULTS.md entry. After writing, print only the line count and the Next step line. Do not commit unless I ask.
 ```
 
-## STEP 3: Write ./.claude/commands/resume.md with exactly this content:
+## STEP 3: Write ./.claude/commands/projectstatus.md with exactly this content:
 ```markdown
 Read-only. Do not edit anything.
 1. Read HANDOVER.md in the repo root. If it does not exist, say "No handover found" and stop.

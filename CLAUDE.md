@@ -24,7 +24,7 @@
 - HANDOVER.md: a snapshot, updated only via /handover. Never append to it.
 
 ## Session Continuity
-- When I run /resume, ask to continue previous work, or send my first task request of a session (not a quick question), follow the steps in .claude/commands/resume.md before doing anything else. If HANDOVER.md does not exist, skip this silently and handle my request normally. Quick questions get answered directly.
+- /projectstatus reports where the project stands from HANDOVER.md and the logs. It does not restore a previous conversation. When I run /projectstatus, ask to continue previous work, or send my first task request of a session (not a quick question), follow the steps in .claude/commands/projectstatus.md before doing anything else. If HANDOVER.md does not exist, skip this silently and handle my request normally. Quick questions get answered directly.
 
 # Project map
 - Purpose: question answering over RBI payment regulations, with evaluation and monitoring.

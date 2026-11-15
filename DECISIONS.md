@@ -118,3 +118,11 @@ work" rule from the Phase 0 `CLAUDE.md`.
 that do not apply to the current phase.
 *Tradeoff:* a rule from an unread section can be missed; section 4 is always read to cover the
 constraints that apply everywhere.
+
+**D30. The custom `/resume` command is renamed `/projectstatus`.** The file moves to
+`.claude/commands/projectstatus.md`, and `CLAUDE.md` and `.claude/setup-instructions.md` point to
+it. It reports where the project stands from `HANDOVER.md` and the logs; it does not restore a
+previous conversation.
+*Why:* the old name shadowed Claude Code's built-in `/resume` session picker and suggested the
+command restores a conversation.
+*Tradeoff:* the habit of typing `/resume` now opens the built-in picker instead.
