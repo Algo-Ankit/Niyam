@@ -173,3 +173,33 @@ judging 150 answers takes about 40 minutes. Fine for offline evals, too slow for
 *Tradeoff:* latency is erratic (4 to 128 s); judge agreement with human labels is unmeasured
 until Phase 3 validates it, as the context file requires. `gemma-4-26b-a4b-it` is the faster
 fallback by config, not automatic.
+
+**D37. Re-scope from RBI payment regulations to US consumer payments regulation.** Owner-approved
+on 2026-11-15. Both RBI's Disclaimer ("caching and links to, and the framing of this Web Site or
+any of the contents are prohibited") and NPCI's terms (same clause, plus a robots.txt that blocks
+unnamed crawlers) grant no licence to store or quote their text, so a hosted corpus is a legal
+risk. Supersedes the RBI/NPCI corpus scope in docs/PROJECT_CONTEXT.md sections 1, 4, 6 and 7.
+*Why:* US federal government works are public domain (17 U.S.C. 105; CFPB states "Information
+created by the CFPB is in the public domain"), eCFR is keyless, and Reg E and Reg Z come as
+structured XML with the official commentary (Supplement I). Phase 0 stack and models are unchanged.
+*Tradeoff:* the India angle is lost. Verified only by agent web research and one eCFR fetch of
+12 CFR 1005.6; not yet checked by code in this repo. CFPB funding litigation is unverified.
+
+**D38. Sources are official government text only.** Owner-approved on 2026-11-15. No law-firm,
+blog or commentary text is indexed; it may only help locate an official document. Conflicts
+between sources are resolved from the primary text, with the page and date recorded.
+*Why:* a wrong paraphrase would corrupt both answers and evals. The first research pass wrongly
+called the 2016 India KYC direction repealed; the repeal clause showed otherwise.
+
+**D39. The product is a Compliance Checker, with idea triage as its second mode.** Owner-approved
+on 2026-11-15. Input is a policy, terms or procedure document (or a short product idea).
+Output is a findings table: obligation, clause cited, status (compliant, non-compliant, missing,
+unclear), quote from the user's text, quote from the regulation, suggested fix, plus a "not
+checked" list. Idea triage never says "this is legal": it lists which provisions in the corpus
+apply and names areas outside the corpus (state money-transmitter licensing, AML) as not checked.
+Obligations are built once from clauses into a reviewed register. Evaluated with seeded-defect
+documents and a hand-written idea set, both owner-reviewed.
+*Why:* a concrete user and a checkable output; the eval is objective and the abstention list
+keeps it honest. *Tradeoff:* the register and seeded defects are hand-built, and one document
+check needs about 20 to 30 judgments, so per-obligation judging goes to the decision model
+(10K RPD) and only the summary to the generator (500 RPD). Not legal advice; US consumer payments only.
