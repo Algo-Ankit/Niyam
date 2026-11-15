@@ -220,3 +220,22 @@ letter checklist.
 *Why:* a concrete user who is losing money, a fixed output, and gold data written by the
 regulator rather than by us. *Tradeoff:* complaint product labels are consumer-chosen and noisy;
 FAQ count and complaint-database terms are unverified. Legal information, not legal advice.
+
+**D41. The product is a YouTube video assistant.** Owner-approved on 2026-11-15. Supersedes D37,
+D38 and D40. consumerfinance.gov returns 403 even for robots.txt to a clearly named client, so
+D40's gold data cannot be fetched without spoofing. Two modes: (1) paste a public YouTube link
+and get a timestamped summary and answers with clickable timestamps, or "not in this video";
+(2) state requirements and get recommended videos. Video content comes only from the Gemini API's
+YouTube URL input (Interactions API, `{"type": "video", "uri": ...}`; one live call with
+gemini-3.5-flash-lite succeeded, 13,567 video tokens). Search and metadata come only from the
+YouTube Data API. No transcript scraping, youtube-transcript-api, yt-dlp or downloads: the
+YouTube API Developer Policies forbid scraping or obtaining scraped YouTube data. Stored data
+expires after 30 days (the policy limit for Non-Authorized Data, which must then be deleted or
+refreshed). The finder must not compute scores from API statistics (the policy forbids derived
+metrics); it uses the API's own ordering and filters, and fit is judged by Gemini watching the
+candidates.
+*Why:* a useful, fixed product built only on sanctioned Google interfaces, reusing the Phase 0
+stack. *Tradeoff:* the YouTube URL input is a preview feature and its pricing and limits may
+change; free tier is 8 hours of YouTube video per day, public videos only; video tokens can
+exceed the generator's 250K tokens-per-minute limit on long videos (tokens per second not yet
+measured); YouTube Data API allows 100 search.list calls per day.
