@@ -96,14 +96,23 @@ def search(conn: psycopg.Connection, embedder: Embedder, query: str, k: int = 8)
     fused = fuse([[c for (c,) in keyword], [c for (c,) in semantic]])[:k]
     if not fused:
         return []
-    details = {
+    scores = dict(fused)
+    return [
+        Hit(h.citation, h.headings, h.body, scores[h.citation])
+        for h in by_citation(conn, [c for c, _ in fused])
+    ]
+
+
+def by_citation(conn: psycopg.Connection, citations: Sequence[str]) -> list[Hit]:
+    """The indexed provisions with these citations, in the order given (score 0)."""
+    rows = {
         citation: (tuple(headings), body)
         for citation, headings, body in conn.execute(
             "SELECT citation, headings, body FROM provisions WHERE citation = ANY(%s)",
-            ([c for c, _ in fused],),
+            (list(citations),),
         ).fetchall()
     }
-    return [Hit(c, *details[c], score=s) for c, s in fused]
+    return [Hit(c, *rows[c], score=0.0) for c in citations if c in rows]
 
 
 def fuse(rankings: Sequence[Sequence[str]]) -> list[tuple[str, float]]:

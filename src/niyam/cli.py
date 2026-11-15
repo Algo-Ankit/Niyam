@@ -3,10 +3,12 @@
 import argparse
 import sys
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 
 import psycopg
 
+from niyam.assistant import pipeline
 from niyam.config import get_settings
 from niyam.corpus import build, download
 from niyam.models.factory import build_models
@@ -70,6 +72,36 @@ def _search(query: str) -> int:
     return 0
 
 
+def _ask(message: str, as_of: date) -> int:
+    settings = get_settings()
+    with closing(build_models(settings)) as models, _connect() as conn:
+        services = pipeline.Services(
+            models.generator, models.embedder, conn, settings.generation_thinking_level
+        )
+        reply = pipeline.answer(message, as_of, services)
+    print(f"Question: {reply.extraction.question}")
+    print()
+    for finding in reply.assessment.findings:
+        print(f"- [{finding.status}] {finding.summary} ({finding.citation})")
+        for assumption in finding.assumptions:
+            print(f"    assumption: {assumption}")
+    if reply.assessment.missing:
+        print()
+        print(f"Tell me these to compute more deadlines: {', '.join(reply.assessment.missing)}")
+    print()
+    if reply.explanation is not None:
+        print(reply.explanation.explanation)
+        print(f"Sources: {', '.join(reply.explanation.citations)}")
+    else:
+        print(f"Explanation withheld: it {reply.rejected_reason}.")
+    if reply.extraction.out_of_scope:
+        print()
+        print(f"Not covered: {', '.join(reply.extraction.out_of_scope)}. {pipeline.NOT_COVERED}")
+    print()
+    print(pipeline.DISCLAIMER)
+    return 0
+
+
 def _connect() -> psycopg.Connection:
     return psycopg.connect(get_settings().database_url.get_secret_value(), connect_timeout=20)
 
@@ -83,6 +115,9 @@ def main() -> None:
     commands.add_parser("index", help="embed the processed corpus and load it into Postgres")
     search = commands.add_parser("search", help="hybrid search over the indexed provisions")
     search.add_argument("query")
+    ask = commands.add_parser("ask", help="answer an F-1 student's question")
+    ask.add_argument("message")
+    ask.add_argument("--as-of", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD")
     args = parser.parse_args()
 
     if args.command == "verify-providers":
@@ -95,3 +130,5 @@ def main() -> None:
         sys.exit(_index())
     if args.command == "search":
         sys.exit(_search(args.query))
+    if args.command == "ask":
+        sys.exit(_ask(args.message, args.as_of))

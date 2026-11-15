@@ -48,4 +48,5 @@
 - src/niyam/corpus/: source download + manifest, eCFR paragraph parser, processed corpus build (data/processed/).
 - src/niyam/rules/: deterministic OPT/STEM OPT deadlines and unemployment counts, each citing its 214.2(f) paragraph.
 - src/niyam/retrieval/: Postgres store (tsvector + pgvector) and hybrid search; `niyam index`, `niyam search`.
+- src/niyam/assistant/: extract facts, apply rules, retrieve, explain, citation/date check; `niyam ask`.
 - tests/: pytest suite. scripts/: bootstrap. docs/: project context and specs.

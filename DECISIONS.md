@@ -290,3 +290,16 @@ and exact vector search, fused by reciprocal rank (k = 60). Heading-only provisi
 indexed; their headings lead each child's search text.
 *Why:* a batch of 40 must not be counted as 1 request, or every index run fails. *Tradeoff:*
 indexing the 181 provisions takes about a minute and uses about 181 of the 1,000 daily requests.
+
+**D46. Assistant pipeline: two generator calls, code-checked output.** Decided by the builder on
+2026-11-15 under the owner's delegation. `niyam ask` runs: (1) the generator extracts
+StudentFacts, a one-sentence question and out-of-scope topics (fixed list: H-1B, green card,
+taxes, travel, other statuses); (2) the rules engine computes findings; (3) hybrid search
+(k = 6) plus the findings' own paragraphs give the provisions; (4) the generator explains using
+only those; (5) code withholds the explanation if it cites a provision it was not given, states
+an ISO date the rules engine did not compute, or writes a date in words or slashes (which
+cannot be checked). Findings, assumptions, missing facts, "not covered" and the disclaimer are
+rendered by code, not by the model.
+*Why:* the model can phrase but can never be the source of a deadline. *Tradeoff:* about 2
+generator requests per question against 500 per day; a withheld explanation still shows the
+computed findings.
