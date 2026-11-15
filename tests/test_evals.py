@@ -6,7 +6,7 @@ from niyam.assistant.pipeline import Extraction
 from niyam.evals.extraction import Item, score, summary
 from niyam.evals.extraction import load_items as load_extraction_items
 from niyam.evals.retrieval import Ranked, hit_at, load_items, metrics, reciprocal_rank
-from niyam.rules.opt import StudentFacts
+from niyam.rules.opt import Job, StudentFacts
 
 _ROOT = Path(__file__).parents[1]
 
@@ -53,3 +53,21 @@ def test_extraction_score_compares_fields_scope_and_deadlines() -> None:
 def test_extraction_set_is_well_formed() -> None:
     items = load_extraction_items(_ROOT / "evals/extraction.jsonl")
     assert len({i.id for i in items}) == len(items) == 15
+
+
+def test_a_phantom_job_changes_the_unemployment_count_and_fails_agreement() -> None:
+    real = StudentFacts(
+        opt_start_date=date(2026, 6, 1),
+        opt_end_date=date(2027, 5, 31),
+        jobs=[Job(start=date(2026, 6, 1), end=date(2026, 8, 10))],
+    )
+    phantom = real.model_copy(
+        update={
+            "jobs": [
+                *real.jobs,
+                real.jobs[0].model_copy(update={"start": date(2026, 8, 11), "end": None}),
+            ]
+        }
+    )
+    item = Item("x", date(2026, 9, 8), "msg", real, frozenset())
+    assert score(item, Extraction(facts=phantom, question="q")).deadlines_agree is False

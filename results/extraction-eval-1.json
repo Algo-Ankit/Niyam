@@ -1,0 +1,377 @@
+{
+ "run_at": "2026-11-15T11:31:16+00:00",
+ "commit": "338292b",
+ "eval_set": "evals/extraction.jsonl",
+ "items": 15,
+ "generation_model": "gemini-3.5-flash-lite",
+ "thinking_level": "low",
+ "summary": {
+  "field_accuracy": 0.992,
+  "all_fields_correct": 0.933,
+  "out_of_scope_correct": 1.0,
+  "deadlines_agree": 1.0,
+  "items_with_deadlines": 11
+ },
+ "scores": [
+  {
+   "id": "e01",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e02",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e03",
+   "wrong_fields": [
+    "jobs"
+   ],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e04",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e05",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e06",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": false,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e07",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": false,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e08",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e09",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": false,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e10",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e11",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": false,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e12",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e13",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e14",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  },
+  {
+   "id": "e15",
+   "wrong_fields": [],
+   "out_of_scope_correct": true,
+   "has_deadlines": true,
+   "deadlines_agree": true
+  }
+ ],
+ "extractions": [
+  {
+   "facts": {
+    "program_end_date": "2026-05-15",
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "What is the last day I can file for post-completion OPT?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": "2026-05-15",
+    "opt_recommendation_date": "2026-05-01",
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "When is my I-765 deadline for post-completion OPT?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": "2026-06-01",
+    "opt_end_date": "2027-05-31",
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": [
+     {
+      "employer": "Acme",
+      "start": "2026-06-01",
+      "end": "2026-08-10"
+     },
+     {
+      "employer": "",
+      "start": "2026-08-11",
+      "end": null
+     }
+    ]
+   },
+   "question": "How many days of unemployment do I have left on my OPT?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": "2026-06-01",
+    "opt_end_date": "2027-05-31",
+    "stem_degree": true,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "When can I file for the STEM extension?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": "2027-05-31",
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": true,
+    "jobs": [
+     {
+      "employer": "Beta Corp",
+      "start": "2027-09-01",
+      "end": null
+     }
+    ]
+   },
+   "question": "When are my STEM OPT validation reports due?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "Can I apply for an H-1B through the lottery while I am on OPT?",
+   "out_of_scope": [
+    "H-1B or other work visas"
+   ]
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "The student is asking if they owe taxes on OPT income and if they can travel to India and return.",
+   "out_of_scope": [
+    "taxes",
+    "travel, visa stamping or re-entry"
+   ]
+  },
+  {
+   "facts": {
+    "program_end_date": "2026-05-15",
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "What is my OPT filing window?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "Can I do OPT while on a J-1 visa?",
+   "out_of_scope": [
+    "J-1, M-1 or other non-F-1 status"
+   ]
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": "2026-07-01",
+    "opt_end_date": "2027-06-30",
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": [
+     {
+      "employer": "Gamma",
+      "start": "2026-07-15",
+      "end": "2026-12-31"
+     },
+     {
+      "employer": "Delta",
+      "start": "2027-02-01",
+      "end": null
+     }
+    ]
+   },
+   "question": "Am I over the unemployment limit on my post-completion OPT?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "What is my OPT application window based on my program end date in December 2025?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": "2027-05-31",
+    "stem_degree": false,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "Can I get the STEM extension if my degree in economics is not STEM and my OPT ends May 31, 2027?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": null,
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": "2027-05-31",
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": true,
+    "jobs": [
+     {
+      "employer": "Beta",
+      "start": "2027-09-01",
+      "end": "2028-01-31"
+     }
+    ]
+   },
+   "question": "When must I report losing my job on STEM OPT?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": "2026-12-18",
+    "opt_recommendation_date": "2026-11-02",
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "When is the deadline to file for post-completion OPT?",
+   "out_of_scope": []
+  },
+  {
+   "facts": {
+    "program_end_date": "2026-08-14",
+    "opt_recommendation_date": null,
+    "opt_start_date": null,
+    "opt_end_date": null,
+    "stem_degree": null,
+    "stem_recommendation_date": null,
+    "on_stem_extension": null,
+    "jobs": []
+   },
+   "question": "When can I file for OPT if my program ends on August 14, 2026?",
+   "out_of_scope": []
+  }
+ ]
+}

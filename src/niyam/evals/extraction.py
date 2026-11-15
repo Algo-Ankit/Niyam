@@ -84,9 +84,12 @@ def _job_spans(facts: StudentFacts) -> list[tuple[date, date | None]]:
     return sorted((job.start, job.end) for job in facts.jobs)
 
 
-def _findings(facts: StudentFacts, as_of: date) -> list[tuple[str, str, date | None, date | None]]:
-    """Employer names are left out: they appear in summaries but never change a date."""
+def _findings(facts: StudentFacts, as_of: date) -> list[tuple[str, str, str]]:
+    """Each finding's rule, status and summary (which carries every date and day count).
+
+    Employer names are blanked first: they appear in summaries but never change a number.
+    """
     unnamed = facts.model_copy(
         update={"jobs": [job.model_copy(update={"employer": ""}) for job in facts.jobs]}
     )
-    return [(f.rule, f.status, f.opens, f.closes) for f in assess(unnamed, as_of).findings]
+    return [(f.rule, f.status, f.summary) for f in assess(unnamed, as_of).findings]
