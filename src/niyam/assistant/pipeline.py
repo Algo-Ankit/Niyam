@@ -128,7 +128,8 @@ def _extraction_prompt(message: str, as_of: date) -> str:
         "Extract facts from an F-1 student's message for a rules engine. Today is "
         f"{as_of.isoformat()}. Use ISO dates (YYYY-MM-DD) and resolve relative dates against "
         "today. Leave any fact the student did not state as null; never guess. List each job "
-        "the student mentions. List topics outside F-1 student rules in out_of_scope.\n\n"
+        "the student says they held; never add a job for a period without work (for example "
+        "'unemployed since'). List topics outside F-1 student rules in out_of_scope.\n\n"
         f"Message:\n{message}"
     )
 
