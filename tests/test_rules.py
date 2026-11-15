@@ -105,7 +105,9 @@ def test_stem_period_reports_and_evaluation() -> None:
         date(2029, 5, 31),
     )
     assert rules["stem_validation_report_1"].closes == date(2027, 12, 15)
-    assert "stem_validation_report_4" in rules
+    assert "stem_validation_report_3" in rules
+    # The 24-month date (2029-06-01) falls after the period ends, so (f)(12)(ii)(B) needs no 4th.
+    assert "stem_validation_report_4" not in rules
     assert rules["stem_12_month_evaluation"].closes == date(2028, 6, 11)
     assert rules["stem_new_employer_i983"].closes == date(2027, 9, 11)
     assert rules["stem_report_loss_of_employment"].closes == date(2028, 2, 10)

@@ -186,7 +186,7 @@ def _stem_obligations(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
     )
     for number in range(1, 5):
         report_date = add_months(start, 6 * number)
-        if report_date > end + timedelta(days=1):
+        if report_date > end:  # reporting ends when the extension concludes
             break
         due = add_business_days(report_date, 10)
         yield Finding(
