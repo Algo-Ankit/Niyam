@@ -267,3 +267,15 @@ start date, and the departure period), and DHS pages written for earlier rules m
 per D38 the regulation wins, and a page enters only after a check that it matches the current text.
 *Why:* the primary text alone answers every deadline the rules engine computes. *Tradeoff:*
 explanatory DHS prose is absent until pages are checked one by one.
+
+**D44. Rules engine conventions where the regulation is silent.** Decided by the builder on
+2026-11-15 under the owner's delegation. Each convention is shown to the user as an assumption
+on the finding it affects: (1) unemployment days count from the OPT EAD start date (SEVP
+practice; 214.2(f)(10)(ii)(E) gives only the 90 and 150 limits); (2) every job the student lists
+counts as qualifying employment; (3) "business days" exclude weekends and the 5 U.S.C. 6103
+federal holidays, moved to the observed weekday; (4) a 24-month STEM period starting on day D
+ends the day before the same date 24 months later; (5) "completion of study" for the 14-month
+limit is the program end date. Rules run only when their facts are known; otherwise the missing
+fact names are returned so the assistant asks instead of guessing.
+*Why:* deadlines must come from code with stated assumptions, never from a model. *Tradeoff:*
+conventions (1) and (4) may differ from SEVIS or USCIS practice in edge cases.
