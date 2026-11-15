@@ -47,4 +47,5 @@
 - src/niyam/: app package (CLI, config). src/niyam/models/: provider-neutral model layer (Gemini adapter, cache, ledger, metering, rate limits).
 - src/niyam/corpus/: source download + manifest, eCFR paragraph parser, processed corpus build (data/processed/).
 - src/niyam/rules/: deterministic OPT/STEM OPT deadlines and unemployment counts, each citing its 214.2(f) paragraph.
+- src/niyam/retrieval/: Postgres store (tsvector + pgvector) and hybrid search; `niyam index`, `niyam search`.
 - tests/: pytest suite. scripts/: bootstrap. docs/: project context and specs.

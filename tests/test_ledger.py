@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -44,4 +45,29 @@ def test_spend_is_summed_per_provider_and_summary_aggregates(tmp_path: Path) -> 
     assert rows["j"].requests == 2
     assert rows["j"].input_tokens == 150
     assert rows["g"].thought_tokens == 3
+    ledger.close()
+
+
+def test_batched_calls_count_every_request(tmp_path: Path) -> None:
+    ledger = CostLedger(tmp_path / "l.sqlite")
+    ledger.record("gemini", "e", Usage(input_tokens=10), 0.0, requests=90)
+    ledger.record("gemini", "e", Usage(input_tokens=5), 0.0)
+    assert ledger.requests_today("e") == 91
+    assert ledger.summary()[0].requests == 91
+
+
+def test_old_ledger_files_gain_the_requests_column(tmp_path: Path) -> None:
+    path = tmp_path / "old.sqlite"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE calls (at_utc TEXT NOT NULL, quota_day TEXT NOT NULL,"
+            " provider TEXT NOT NULL, model_id TEXT NOT NULL, input_tokens INTEGER NOT NULL,"
+            " output_tokens INTEGER NOT NULL, thought_tokens INTEGER NOT NULL,"
+            " cost_usd REAL NOT NULL)"
+        )
+        today = quota_day(datetime.now(UTC)).isoformat()
+        conn.execute("INSERT INTO calls VALUES ('t', ?, 'gemini', 'e', 1, 0, 0, 0.0)", (today,))
+    conn.close()
+    ledger = CostLedger(path)
+    assert ledger.requests_today("e") == 1  # old rows count as one request each
     ledger.close()

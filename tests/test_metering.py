@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from fakes import FakeDecisionModel
+from fakes import FakeDecisionModel, FakeEmbedder
 from niyam.config import RateLimits
 from niyam.models.errors import BudgetExceededError, QuotaExhaustedError, RateLimitedError
 from niyam.models.ledger import CostLedger
-from niyam.models.metering import Meter, MeteredDecisionModel
-from niyam.models.types import Usage
+from niyam.models.metering import Meter, MeteredDecisionModel, MeteredEmbedder
+from niyam.models.types import EmbeddingInput, Usage
 
 
 @pytest.fixture
@@ -103,3 +103,12 @@ def test_concurrent_calls_cannot_overshoot_the_daily_quota(ledger: CostLedger) -
     release.set()
     first.join()
     assert ledger.requests_today("m") == 1
+
+
+def test_embedding_batch_counts_one_request_per_text(ledger: CostLedger) -> None:
+    meter, _ = make_meter(ledger, limits=RateLimits(requests_per_day=5))
+    embedder = MeteredEmbedder(FakeEmbedder(), meter)
+    embedder.embed([EmbeddingInput(t, "document") for t in ("a", "b", "c")])
+    assert ledger.requests_today("m") == 3
+    with pytest.raises(QuotaExhaustedError):
+        embedder.embed([EmbeddingInput(t, "document") for t in ("d", "e", "f")])  # 6 > 5

@@ -59,3 +59,17 @@ def test_single_request_larger_than_limit_is_rejected() -> None:
 def test_estimate_tokens_is_positive_and_scales() -> None:
     assert estimate_tokens("") == 1
     assert estimate_tokens("a" * 400) == 100
+
+
+def test_a_batch_counts_as_many_requests() -> None:
+    limiter, t = make(rpm=100, tpm=None)
+    limiter.acquire(1, requests=90)
+    t.now = 5.0
+    limiter.acquire(1, requests=90)  # 180 > 100: waits for the first batch to leave the window
+    assert t.now == pytest.approx(60.0)
+
+
+def test_a_batch_larger_than_the_limit_is_refused() -> None:
+    limiter, _ = make(rpm=100, tpm=None)
+    with pytest.raises(ValueError, match="101 requests"):
+        limiter.acquire(1, requests=101)

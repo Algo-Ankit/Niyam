@@ -79,8 +79,9 @@ is unmeasured until Phase 3.
 | Task hints | no `task_type`; prefixes `task: search result \| query: …` and `title: … \| text: …` | docs |
 | Max input | 8,192 tokens, longer input "silently truncated" | docs |
 | **Batching** | a plain list of strings returns **one aggregated vector**; wrap each text in its own `types.Content` to get one vector per text | docs, measured |
-| Max items per request | not stated; whether 8,192 tokens is per item or per request is unverified (test in Phase 1) | — |
+| Max items per request | not stated; batches of 90 texts (about 6K tokens) succeed | measured 2026-11-15 |
 | Free tier limits | 100 RPM, 30K TPM, 1K RPD | AI Studio, owner-confirmed 2026-11-15 |
+| **Requests per batch** | **each text in a batch counts as one request** toward the per-minute limit: batches of 40 hit 429 `embed_content_free_tier_requests, limit: 100`. Assumed (unverified) to count the same way toward 1K RPD | measured 2026-11-15 |
 
 Measured: 4 texts sent as separate `Content`s returned 4 unit vectors in 947 ms using 109
 tokens; the query's nearest document was the correct clause (cosine 0.833 vs 0.653 and 0.669).

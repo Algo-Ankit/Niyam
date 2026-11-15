@@ -2,11 +2,15 @@
 
 import argparse
 import sys
+from contextlib import closing
 from pathlib import Path
+
+import psycopg
 
 from niyam.config import get_settings
 from niyam.corpus import build, download
 from niyam.models.factory import build_models
+from niyam.retrieval import store
 from niyam.verify import run_checks
 
 RAW_TITLE_8 = Path("data/raw/ECFR-title8.xml")
@@ -48,12 +52,37 @@ def _corpus_build() -> int:
     return 0
 
 
+def _index() -> int:
+    settings = get_settings()
+    with closing(build_models(settings)) as models, _connect() as conn:
+        store.create_schema(conn, models.embedder.dimensions)
+        count = store.load_corpus(conn, F1_CORPUS, models.embedder)
+    print(f"indexed {count} provisions from {F1_CORPUS}")
+    return 0
+
+
+def _search(query: str) -> int:
+    settings = get_settings()
+    with closing(build_models(settings)) as models, _connect() as conn:
+        hits = store.search(conn, models.embedder, query)
+    for hit in hits:
+        print(f"{hit.score:.4f}  {hit.citation}  {hit.body[:90]}")
+    return 0
+
+
+def _connect() -> psycopg.Connection:
+    return psycopg.connect(get_settings().database_url.get_secret_value(), connect_timeout=20)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="niyam")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("verify-providers", help="make one live call to each provider")
     commands.add_parser("corpus-fetch", help="download the eCFR title 8 XML from govinfo")
     commands.add_parser("corpus-build", help="parse 8 CFR 214.2(f) into the processed corpus")
+    commands.add_parser("index", help="embed the processed corpus and load it into Postgres")
+    search = commands.add_parser("search", help="hybrid search over the indexed provisions")
+    search.add_argument("query")
     args = parser.parse_args()
 
     if args.command == "verify-providers":
@@ -62,3 +91,7 @@ def main() -> None:
         sys.exit(_corpus_fetch())
     if args.command == "corpus-build":
         sys.exit(_corpus_build())
+    if args.command == "index":
+        sys.exit(_index())
+    if args.command == "search":
+        sys.exit(_search(args.query))

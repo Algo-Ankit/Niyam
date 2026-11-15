@@ -51,13 +51,21 @@ class CostLedger:
             " thought_tokens INTEGER NOT NULL,"
             " cost_usd REAL NOT NULL)"
         )
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(calls)")}
+        if "requests" not in columns:
+            self._conn.execute("ALTER TABLE calls ADD COLUMN requests INTEGER NOT NULL DEFAULT 1")
         self._conn.execute("CREATE INDEX IF NOT EXISTS calls_by_day ON calls (model_id, quota_day)")
 
-    def record(self, provider: str, model_id: str, usage: Usage, cost_usd: float) -> None:
+    def record(
+        self, provider: str, model_id: str, usage: Usage, cost_usd: float, requests: int = 1
+    ) -> None:
+        """Record one call; `requests` is how many requests the provider counts it as."""
         now = self._clock()
         with self._lock:
             self._conn.execute(
-                "INSERT INTO calls VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO calls (at_utc, quota_day, provider, model_id, input_tokens,"
+                " output_tokens, thought_tokens, cost_usd, requests)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     now.isoformat(),
                     quota_day(now).isoformat(),
@@ -67,6 +75,7 @@ class CostLedger:
                     usage.output_tokens,
                     usage.thought_tokens,
                     cost_usd,
+                    requests,
                 ),
             )
 
@@ -74,7 +83,7 @@ class CostLedger:
         today = quota_day(self._clock()).isoformat()
         with self._lock:
             (count,) = self._conn.execute(
-                "SELECT COUNT(*) FROM calls WHERE model_id = ? AND quota_day = ?",
+                "SELECT COALESCE(SUM(requests), 0) FROM calls WHERE model_id = ? AND quota_day = ?",
                 (model_id, today),
             ).fetchone()
         return int(count)
@@ -90,7 +99,7 @@ class CostLedger:
         """Per day, per model totals, oldest first."""
         with self._lock:
             rows = self._conn.execute(
-                "SELECT quota_day, provider, model_id, COUNT(*), SUM(input_tokens),"
+                "SELECT quota_day, provider, model_id, SUM(requests), SUM(input_tokens),"
                 " SUM(output_tokens), SUM(thought_tokens), SUM(cost_usd)"
                 " FROM calls GROUP BY quota_day, provider, model_id"
                 " ORDER BY quota_day, provider, model_id"

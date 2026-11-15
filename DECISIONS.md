@@ -279,3 +279,14 @@ limit is the program end date. Rules run only when their facts are known; otherw
 fact names are returned so the assistant asks instead of guessing.
 *Why:* deadlines must come from code with stated assumptions, never from a model. *Tradeoff:*
 conventions (1) and (4) may differ from SEVIS or USCIS practice in edge cases.
+
+**D45. Embedding batches are metered per text; retrieval is hybrid with reciprocal rank fusion.**
+Owner-approved on 2026-11-15. The Gemini free tier counts each text in an embedding batch as one
+request (measured: 429 at batches of 40 against the 100 requests/minute limit), so the meter,
+rate limiter and ledger now carry a request count per call, and documents are embedded in
+batches of 90. Provisions live in Postgres (Neon) with a generated English tsvector and a
+768-dimension pgvector column; a query runs keyword search (words ORed, ranked by ts_rank_cd)
+and exact vector search, fused by reciprocal rank (k = 60). Heading-only provisions are not
+indexed; their headings lead each child's search text.
+*Why:* a batch of 40 must not be counted as 1 request, or every index run fails. *Tradeoff:*
+indexing the 181 provisions takes about a minute and uses about 181 of the 1,000 daily requests.

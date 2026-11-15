@@ -56,54 +56,62 @@ class Meter:
         )
 
     def run[R](
-        self, estimated_tokens: int, call: Callable[[], R], usage_of: Callable[[R], Usage]
+        self,
+        estimated_tokens: int,
+        call: Callable[[], R],
+        usage_of: Callable[[R], Usage],
+        requests: int = 1,
     ) -> R:
+        """Run `call`, which the provider counts as `requests` requests (e.g. one per text)."""
         estimated_cost = estimated_tokens * self._price
-        self._reserve(estimated_cost)
+        self._reserve(estimated_cost, requests)
         try:
-            return self._attempt(estimated_tokens, call, usage_of)
+            return self._attempt(estimated_tokens, call, usage_of, requests)
         finally:
-            self._release(estimated_cost)
+            self._release(estimated_cost, requests)
 
     def _attempt[R](
-        self, estimated_tokens: int, call: Callable[[], R], usage_of: Callable[[R], Usage]
+        self,
+        estimated_tokens: int,
+        call: Callable[[], R],
+        usage_of: Callable[[R], Usage],
+        requests: int,
     ) -> R:
         for attempt in range(self._max_retries + 1):
-            self._limiter.acquire(estimated_tokens)
+            self._limiter.acquire(estimated_tokens, requests)
             try:
                 result = call()
             except RateLimitedError as error:
                 # A rejected request may still count against the provider's daily quota.
-                self._ledger.record(self.provider, self.model_id, Usage(), 0.0)
+                self._ledger.record(self.provider, self.model_id, Usage(), 0.0, requests)
                 if attempt == self._max_retries:
                     raise
                 self._sleep(error.retry_after_seconds or BACKOFF_BASE_SECONDS * 2**attempt)
             else:
                 usage = usage_of(result)
-                self._ledger.record(
-                    self.provider, self.model_id, usage, usage.input_tokens * self._price
-                )
+                cost = usage.input_tokens * self._price
+                self._ledger.record(self.provider, self.model_id, usage, cost, requests)
                 return result
         raise AssertionError("unreachable: the loop returns or raises")
 
     # NOTE: quota and budget count calls still in flight, so concurrent callers cannot overshoot.
-    def _reserve(self, estimated_cost: float) -> None:
+    def _reserve(self, estimated_cost: float, requests: int) -> None:
         with self._reservation_lock:
-            self._check_daily_quota()
+            self._check_daily_quota(requests)
             self._check_budget(estimated_cost)
-            self._in_flight += 1
+            self._in_flight += requests
             self._in_flight_cost += estimated_cost
 
-    def _release(self, estimated_cost: float) -> None:
+    def _release(self, estimated_cost: float, requests: int) -> None:
         with self._reservation_lock:
-            self._in_flight -= 1
+            self._in_flight -= requests
             self._in_flight_cost -= estimated_cost
 
-    def _check_daily_quota(self) -> None:
+    def _check_daily_quota(self, requests: int) -> None:
         limit = self._limits.requests_per_day
         if (
             limit is not None
-            and self._ledger.requests_today(self.model_id) + self._in_flight >= limit
+            and self._ledger.requests_today(self.model_id) + self._in_flight + requests > limit
         ):
             raise QuotaExhaustedError(f"{self.model_id}: daily limit of {limit} requests reached")
 
@@ -166,4 +174,7 @@ class MeteredEmbedder:
 
     def embed(self, inputs: Sequence[EmbeddingInput]) -> EmbeddingResult:
         estimate = estimate_tokens("".join(i.text + (i.title or "") for i in inputs))
-        return self._meter.run(estimate, lambda: self._inner.embed(inputs), lambda r: r.usage)
+        # NOTE: the Gemini free tier counts each text in a batch as one request (seen 2026-11-15).
+        return self._meter.run(
+            estimate, lambda: self._inner.embed(inputs), lambda r: r.usage, requests=len(inputs)
+        )
