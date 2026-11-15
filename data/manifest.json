@@ -1,0 +1,10 @@
+[
+  {
+    "url": "https://www.govinfo.gov/bulkdata/ECFR/title-8/ECFR-title8.xml",
+    "path": "data/raw/ECFR-title8.xml",
+    "sha256": "0b36bdcddc16ecfbbbbaae69a5b2fff81ef64f7b4c08d1af19a668f4ea3a92aa",
+    "size_bytes": 5456449,
+    "last_modified": "Thu, 15 Oct 2026 21:57:06 GMT",
+    "fetched_at": "2026-11-15T10:57:35+00:00"
+  }
+]

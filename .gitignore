@@ -14,7 +14,7 @@ __pycache__/
 # Local response cache and cost/quota ledger
 .state/
 
-# Raw data (processed text is committed only if RBI's terms allow; decided in Phase 1)
+# Raw downloads (reproducible with `niyam corpus-fetch`); processed public-domain text is committed (D43)
 data/raw/
 
 # OS / editor

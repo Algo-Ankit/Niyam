@@ -2,10 +2,16 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from niyam.config import get_settings
+from niyam.corpus import build, download
 from niyam.models.factory import build_models
 from niyam.verify import run_checks
+
+RAW_TITLE_8 = Path("data/raw/ECFR-title8.xml")
+MANIFEST = Path("data/manifest.json")
+F1_CORPUS = Path("data/processed/8-cfr-214.2-f.json")
 
 
 def _verify_providers() -> int:
@@ -29,11 +35,30 @@ def _verify_providers() -> int:
     return 0 if all(r.ok for r in results) else 1
 
 
+def _corpus_fetch() -> int:
+    entry = download.fetch(download.ECFR_TITLE_8, RAW_TITLE_8)
+    download.record(MANIFEST, entry)
+    print(f"{entry.url}: {entry.size_bytes} bytes, sha256 {entry.sha256[:12]}")
+    return 0
+
+
+def _corpus_build() -> int:
+    count = build.build_f1_corpus(RAW_TITLE_8, download.ECFR_TITLE_8, F1_CORPUS)
+    print(f"{F1_CORPUS}: {count} provisions")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="niyam")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("verify-providers", help="make one live call to each provider")
+    commands.add_parser("corpus-fetch", help="download the eCFR title 8 XML from govinfo")
+    commands.add_parser("corpus-build", help="parse 8 CFR 214.2(f) into the processed corpus")
     args = parser.parse_args()
 
     if args.command == "verify-providers":
         sys.exit(_verify_providers())
+    if args.command == "corpus-fetch":
+        sys.exit(_corpus_fetch())
+    if args.command == "corpus-build":
+        sys.exit(_corpus_build())

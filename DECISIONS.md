@@ -255,3 +255,15 @@ text), retrieval recall@k and MRR, grounding and correctness (calibrated judge),
 math, and verified sources. *Tradeoff:* immigration rules change (DHS proposed an OPT fee rule on
 2026-10-08), so the corpus needs a freshness check; a ready-made DHS FAQ gold set is unconfirmed.
 Information, not legal advice.
+
+**D43. Corpus v1 is 8 CFR 214.2(f) only; processed text is committed.** Decided by the builder
+on 2026-11-15 under the owner's delegation of build decisions. Source: govinfo bulk eCFR title 8
+(current as of 2026-10-14), parsed into 203 provisions with their citation path and headings;
+the parser rejects any label that breaks the CFR numbering sequence. The processed JSON is
+committed because US federal works are public domain (17 U.S.C. 105); the 5.4 MB raw XML stays
+gitignored and is reproducible with `niyam corpus-fetch`. Study in the States pages are deferred:
+the current regulation sets 30-day limits (Form I-765 filing after the program end date, the OPT
+start date, and the departure period), and DHS pages written for earlier rules may disagree;
+per D38 the regulation wins, and a page enters only after a check that it matches the current text.
+*Why:* the primary text alone answers every deadline the rules engine computes. *Tradeoff:*
+explanatory DHS prose is absent until pages are checked one by one.
