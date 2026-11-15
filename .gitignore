@@ -22,3 +22,6 @@ data/raw/
 Thumbs.db
 .idea/
 .vscode/
+
+# Local backups made before overwriting a file
+*.bak-*
