@@ -45,3 +45,16 @@ Format:
   candidates per arm. Eval set evals/retrieval.jsonl was written by the builder and is not yet
   owner-reviewed.
 - Raw output: results/retrieval-eval-1.json
+
+## R5 2026-11-15 - Fact extraction on 15 messages, deadline agreement
+- Value: field accuracy 0.992; all fields correct 0.933 (14 of 15); out-of-scope topics
+  correct 1.0 (15 of 15); deadlines agree with gold facts 0.909 (10 of 11 messages that have
+  deadlines). The miss (e03) added a nameless ongoing "job" from the day after the real job
+  ended ("unemployed since"), turning 29 unemployment days into 0.
+- Produced by: `uv run niyam eval-extraction results/extraction-eval-2.json` at commit 7f155a6
+  (results/extraction-eval-1.json, at 338292b, scored 1.0 on deadlines because that version
+  compared only finding dates and status, not day counts; fixed in 7f155a6)
+- Config: gemini-3.5-flash-lite, thinking level low, Interactions API, response cache on (the
+  second run very likely reused the first run's extractions). Eval set evals/extraction.jsonl was
+  written by the builder and is not yet owner-reviewed.
+- Raw output: results/extraction-eval-2.json
