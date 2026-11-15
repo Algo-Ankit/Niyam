@@ -108,3 +108,13 @@ socket connections blocked) and in about a second, so it gates every commit alon
 mypy. The live `verify-providers` check stays manual.
 *Why:* a failing test can no longer be committed by accident.
 *Tradeoff:* commits wait for the suite; revisit if it stops being fast or offline.
+
+**D29. Read `docs/PROJECT_CONTEXT.md` by section, not in full.** At the start of a phase, read
+only that phase's sections (its entry in section 11 and the sections it covers) plus section 4,
+Hard constraints. Otherwise rely on `CLAUDE.md`, `HANDOVER.md` and the tail of `DECISIONS.md`,
+and read other sections only when a task needs them. Replaces the "read it fully before any
+work" rule from the Phase 0 `CLAUDE.md`.
+*Why:* the context file is long; reading all of it every session spends context on sections
+that do not apply to the current phase.
+*Tradeoff:* a rule from an unread section can be missed; section 4 is always read to cover the
+constraints that apply everywhere.

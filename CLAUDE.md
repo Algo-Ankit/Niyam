@@ -28,7 +28,8 @@
 
 # Project map
 - Purpose: question answering over RBI payment regulations, with evaluation and monitoring.
-- Source of truth: docs/PROJECT_CONTEXT.md (read fully before any work). Verified provider facts: docs/providers.md.
+- Source of truth: docs/PROJECT_CONTEXT.md. At a phase start, read only that phase's sections (its section 11 entry and the sections it covers) plus section 4, Hard constraints (D29).
+- Otherwise rely on CLAUDE.md, HANDOVER.md and `tail` of DECISIONS.md; read other context sections only when a task needs them. Verified provider facts: docs/providers.md.
 - Stack: Python 3.12, google-genai (Gemini), langfuse, psycopg, pydantic-settings; ruff, mypy --strict, pytest.
 - Toolchain is repo-local: `bash scripts/bootstrap.sh` creates .tools/ (uv, Python 3.12, uv cache) and .venv. No global installs, PATH/profile edits, or global git config.
 - `uv` below means `.tools/bootstrap/Scripts/uv.exe` (Windows) or `.tools/bootstrap/bin/uv`.
