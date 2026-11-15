@@ -57,6 +57,7 @@ ignore = ["PLR2004"]  # magic-number rule is noisy for thresholds named in confi
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 "src/niyam/cli.py" = ["T201"]  # the CLI's job is to print
+"scripts/bench_generation.py" = ["T201"]  # a benchmark script reports as it runs
 
 [tool.mypy]
 strict = true

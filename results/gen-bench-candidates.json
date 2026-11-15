@@ -1,0 +1,152 @@
+[
+  {
+    "answer": {
+      "answer": "A full-KYC PPI can hold a maximum limit of Rs 2,00,000 outstanding at any point in time.",
+      "citations": [
+        "P1"
+      ],
+      "abstain": false
+    },
+    "tokens": 253,
+    "model": "gemini-3.8-flash",
+    "question": "What is the maximum balance a full-KYC PPI can hold?",
+    "seconds": 86.55
+  },
+  {
+    "answer": {
+      "answer": "The total amount loaded into a minimum-detail PPI during the financial year shall not exceed Rs 1,20,000. However, the provided passages do not explicitly state whether cash withdrawal is permitted for a minimum-detail PPI (they only specify that cash withdrawal using small PPIs is not permitted).",
+      "citations": [
+        "P2"
+      ],
+      "abstain": true
+    },
+    "tokens": 303,
+    "model": "gemini-3.8-flash",
+    "question": "Can I withdraw cash from a minimum-detail PPI and what is the yearly load limit?",
+    "seconds": 62.78
+  },
+  {
+    "answer": {
+      "answer": "I am sorry, but the provided passages do not contain information regarding the penalty for a bank missing the NEFT cut-off time.",
+      "citations": [],
+      "abstain": true
+    },
+    "tokens": 251,
+    "model": "gemini-3.8-flash",
+    "question": "What is the penalty for a bank missing the NEFT cut-off time?",
+    "seconds": 225.53
+  },
+  {
+    "answer": {
+      "answer": "A full-KYC PPI can hold a maximum outstanding balance of up to Rs 2,00,000 at any point of time.",
+      "citations": [
+        "P1"
+      ],
+      "abstain": false
+    },
+    "tokens": 255,
+    "model": "gemini-3.7-flash",
+    "question": "What is the maximum balance a full-KYC PPI can hold?",
+    "seconds": 128.52
+  },
+  {
+    "answer": {
+      "answer": "The provided passages specify that the total amount loaded into a minimum-detail PPI during a financial year shall not exceed Rs 1,20,000, but they do not mention whether cash withdrawal is permitted specifically for minimum-detail PPIs.",
+      "citations": [
+        "P2"
+      ],
+      "abstain": true
+    },
+    "tokens": 509,
+    "model": "gemini-3.7-flash",
+    "question": "Can I withdraw cash from a minimum-detail PPI and what is the yearly load limit?",
+    "seconds": 203.39
+  },
+  {
+    "answer": {
+      "answer": "The provided passages do not contain information regarding the penalty for a bank missing the NEFT cut-off time.",
+      "citations": [],
+      "abstain": true
+    },
+    "tokens": 256,
+    "model": "gemini-3.7-flash",
+    "question": "What is the penalty for a bank missing the NEFT cut-off time?",
+    "seconds": 135.55
+  },
+  {
+    "answer": {
+      "answer": "The maximum outstanding limit (balance) a full-KYC PPI can hold at any point of time is Rs 2,00,000.",
+      "citations": [
+        "P1"
+      ],
+      "abstain": false
+    },
+    "tokens": 354,
+    "model": "gemini-3.5-flash",
+    "question": "What is the maximum balance a full-KYC PPI can hold?",
+    "seconds": 5.72
+  },
+  {
+    "answer": {
+      "answer": "For a minimum-detail PPI, the total amount loaded during the financial year cannot exceed Rs 1,20,000. Additionally, cash withdrawal using small PPIs is not permitted.",
+      "citations": [
+        "P2",
+        "P3"
+      ],
+      "abstain": false
+    },
+    "tokens": 732,
+    "model": "gemini-3.5-flash",
+    "question": "Can I withdraw cash from a minimum-detail PPI and what is the yearly load limit?",
+    "seconds": 6.68
+  },
+  {
+    "answer": {
+      "answer": "I am sorry, but the provided passages do not contain information about the penalty for a bank missing the NEFT cut-off time.",
+      "citations": [],
+      "abstain": true
+    },
+    "tokens": 331,
+    "model": "gemini-3.5-flash",
+    "question": "What is the penalty for a bank missing the NEFT cut-off time?",
+    "seconds": 5.74
+  },
+  {
+    "answer": {
+      "answer": "A full-KYC PPI can hold a maximum outstanding balance of Rs 2,00,000 at any point in time.",
+      "citations": [
+        "P1"
+      ],
+      "abstain": false
+    },
+    "tokens": 640,
+    "model": "gemini-4-hydrogen",
+    "question": "What is the maximum balance a full-KYC PPI can hold?",
+    "seconds": 8.21
+  },
+  {
+    "answer": {
+      "answer": "For minimum-detail PPIs, the total amount loaded during the financial year shall not exceed Rs 1,20,000. Regarding cash withdrawal, the passages state that cash withdrawal using small PPIs is not permitted.",
+      "citations": [
+        "P2",
+        "P3"
+      ],
+      "abstain": false
+    },
+    "tokens": 943,
+    "model": "gemini-4-hydrogen",
+    "question": "Can I withdraw cash from a minimum-detail PPI and what is the yearly load limit?",
+    "seconds": 18.58
+  },
+  {
+    "answer": {
+      "answer": "The provided passages do not contain information about the penalty for a bank missing the NEFT cut-off time.",
+      "citations": [],
+      "abstain": true
+    },
+    "tokens": 705,
+    "model": "gemini-4-hydrogen",
+    "question": "What is the penalty for a bank missing the NEFT cut-off time?",
+    "seconds": 36.4
+  }
+]
