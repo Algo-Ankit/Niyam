@@ -73,7 +73,7 @@ class Services:
 
 def answer(message: str, as_of: date, services: Services) -> Reply:
     generator, level = services.generator, services.thinking_level
-    extraction = _generate(generator, _extraction_prompt(message, as_of), Extraction, level)
+    extraction = extract(message, as_of, generator, level)
     assessment = assess(extraction.facts, as_of)
     provisions = _provisions(services.conn, services.embedder, extraction.question, assessment)
     explanation = _generate(
@@ -84,6 +84,13 @@ def answer(message: str, as_of: date, services: Services) -> Reply:
     )
     reason = check_explanation(explanation, assessment, provisions)
     return Reply(extraction, assessment, provisions, None if reason else explanation, reason)
+
+
+def extract(
+    message: str, as_of: date, generator: GenerativeModel, thinking_level: ThinkingLevel | None
+) -> Extraction:
+    """The student's facts, question and out-of-scope topics, as the generator reads them."""
+    return _generate(generator, _extraction_prompt(message, as_of), Extraction, thinking_level)
 
 
 def check_explanation(

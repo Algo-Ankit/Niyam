@@ -14,6 +14,7 @@ import psycopg
 from niyam.assistant import pipeline
 from niyam.config import get_settings
 from niyam.corpus import build, download
+from niyam.evals import extraction as extraction_eval
 from niyam.evals import retrieval as retrieval_eval
 from niyam.models.factory import build_models
 from niyam.retrieval import store
@@ -23,6 +24,7 @@ RAW_TITLE_8 = Path("data/raw/ECFR-title8.xml")
 MANIFEST = Path("data/manifest.json")
 F1_CORPUS = Path("data/processed/8-cfr-214.2-f.json")
 RETRIEVAL_SET = Path("evals/retrieval.jsonl")
+EXTRACTION_SET = Path("evals/extraction.jsonl")
 
 
 def _verify_providers() -> int:
@@ -130,6 +132,35 @@ def _eval_retrieval(output: Path) -> int:
     return 0
 
 
+def _eval_extraction(output: Path) -> int:
+    settings = get_settings()
+    items = extraction_eval.load_items(EXTRACTION_SET)
+    level = settings.generation_thinking_level
+    with closing(build_models(settings)) as models:
+        extractions = [pipeline.extract(i.message, i.as_of, models.generator, level) for i in items]
+    scores = [extraction_eval.score(i, e) for i, e in zip(items, extractions, strict=True)]
+    totals = extraction_eval.summary(scores)
+    report = {
+        "run_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "commit": _commit(),
+        "eval_set": EXTRACTION_SET.as_posix(),
+        "items": len(items),
+        "generation_model": settings.generation_model,
+        "thinking_level": level,
+        "summary": totals,
+        "scores": [asdict(s) for s in scores],
+        "extractions": [e.model_dump(mode="json") for e in extractions],
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    print("  ".join(f"{name}={value}" for name, value in totals.items()))
+    for s in scores:
+        if s.wrong_fields or not s.out_of_scope_correct or not s.deadlines_agree:
+            print(f"  {s.id}: wrong={list(s.wrong_fields)} scope_ok={s.out_of_scope_correct}")
+    print(f"{len(items)} messages; raw output in {output}")
+    return 0
+
+
 def _commit() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607  # git from PATH by design
@@ -155,6 +186,8 @@ def main() -> None:
     search.add_argument("query")
     evaluate = commands.add_parser("eval-retrieval", help="score retrieval arms on the eval set")
     evaluate.add_argument("output", type=Path, help="where to save the raw JSON report")
+    evaluate_x = commands.add_parser("eval-extraction", help="score fact extraction end to end")
+    evaluate_x.add_argument("output", type=Path, help="where to save the raw JSON report")
     ask = commands.add_parser("ask", help="answer an F-1 student's question")
     ask.add_argument("message")
     ask.add_argument("--as-of", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD")
@@ -172,5 +205,7 @@ def main() -> None:
         sys.exit(_search(args.query))
     if args.command == "eval-retrieval":
         sys.exit(_eval_retrieval(args.output))
+    if args.command == "eval-extraction":
+        sys.exit(_eval_extraction(args.output))
     if args.command == "ask":
         sys.exit(_ask(args.message, args.as_of))
