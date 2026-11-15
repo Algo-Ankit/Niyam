@@ -2,7 +2,8 @@
 
 Behaviours verified against live calls on 2026-11-14 (see docs/providers.md):
 - Decisions return answers keyed by question name in arbitrary order; `noul` is P(yes).
-- gemini-4-hydrogen is called through the Interactions API with `thinking_level`.
+- Generation models (gemini-3.5-flash by default) are called through the Interactions API
+  with `thinking_level`.
 - gemini-embedding-2 aggregates a plain list of strings into ONE vector; each text must be
   wrapped in its own `Content` to get one vector per text. It has no `task_type`; the task
   is expressed with documented text prefixes.

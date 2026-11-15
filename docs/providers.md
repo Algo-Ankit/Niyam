@@ -47,30 +47,17 @@ even when none fits; scores are weighted averages. Numbers and dates stay verifi
 - To add Jev later: one adapter implementing `DecisionModel` plus one branch in
   `niyam.models.factory`.
 
-## Generative model: `gemini-4-hydrogen`
+## Generative model: `gemini-3.5-flash` (in use, D33)
 
-| Item | Value | Source |
-|---|---|---|
-| API | Interactions API: `client.interactions.create(model, input, generation_config, response_format)`, read `output_text` | docs, measured |
-| Thinking | `generation_config={"thinking_level": ...}`: low, medium, high, xhigh; default high | docs |
-| Structured output | `response_format={"type": "text", "mime_type": "application/json", "schema": ...}` | docs, measured |
-| Context | 1,048,576 tokens; synchronous output cap 65,536 | docs |
-| Caching | "Explicit caching is not supported in the Interactions API, or for Gemini 4 models"; implicit caching only (minimum 4,096 tokens) | docs |
-| Free tier data use | "Used to improve our products": Yes on the free tier | docs |
-| Free tier limits | only shown in AI Studio | docs; **owner to provide** |
+Same Interactions API call as before (`client.interactions.create` with `thinking_level` and a
+JSON `response_format`); only the model id changed. Latency on one RAG-shaped prompt, free tier,
+thinking `low`: 3.5-flash 4.2 to 6.7 s (R1, R2). Candidates `gemini-3.6-flash` (3.7 to 6.0 s)
+and `gemini-3.5-flash-lite` (3.4 to 3.9 s) were also fast and correct (R2). Free tier limits for
+3.5-flash are only shown in AI Studio: **owner to provide**; until then they are unset in config.
 
-**Measured: low vs medium thinking** (same 3 prompts, about 400 input tokens each, JSON output):
-
-| Level | Latency per call | Thought tokens | Total tokens |
-|---|---|---|---|
-| low | 51.1 s, 56.5 s, 30.4 s | 98, 81, 202 | 584, 534, 656 |
-| medium | 56.3 s, 52.3 s, 62.9 s | 247, 285, 366 | 713, 730, 812 |
-
-Both levels answered the two in-scope questions correctly and abstained on the out-of-scope
-one. `low` added an extra, irrelevant citation on one question; three examples are not enough
-to compare quality. A later `verify-providers` call took 75.8 s. **Latency of 30 to 76 s per
-call is not explained by thinking volume** and is the main open risk for the demo and for
-evaluation runtime.
+Not chosen: `gemini-4-hydrogen` took 8.2 to 36.4 s (R1; earlier manual probes saw 30 to 76 s).
+`gemini-3.7-flash` and `gemini-3.8-flash` took 63 to 226 s and wrongly abstained on one
+answerable question (R1). Three questions per model is a smoke test, not a quality comparison.
 
 ## Embeddings: `gemini-embedding-2`
 

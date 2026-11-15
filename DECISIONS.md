@@ -139,3 +139,13 @@ but not yet been recorded, under a lock, when it checks the daily quota and the 
 *Why:* the check ran before the call and the ledger write after it, so parallel callers
 (Phase 2 re-ranking, eval runs) could all pass the check and overshoot the limit.
 *Tradeoff:* a retried call is counted twice for a moment, which errs on the side of stopping.
+
+**D33 (supersedes D5 for the generative model). `gemini-3.5-flash` replaces `gemini-4-hydrogen`.**
+Same prompt, same adapter, thinking level `low`, three questions per model (R1, R2): 3.5-flash
+answered in 4.2 to 6.7 s with correct citations and a correct abstention; hydrogen took 8.2 to
+36.4 s; 3.7-flash and 3.8-flash took 63 to 226 s and wrongly abstained on a question they could
+answer. 3.6-flash (3.7 to 6.0 s) and 3.5-flash-lite (3.4 to 3.9 s) were also fast and correct.
+*Why 3.5-flash:* fast, stable, and answered all three questions correctly; the lite model is
+faster but the answer text was not compared at scale.
+*Tradeoff:* three questions per model is a smoke test, not a quality comparison. Phase 3 evals
+decide whether `gemini-3.6-flash` or the lite model is better; switching is one config value.

@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # Generative model (answers, judge) and embeddings.
     gemini_api_key: SecretStr
-    generation_model: str = "gemini-4-hydrogen"
+    generation_model: str = "gemini-3.5-flash"
     generation_thinking_level: ThinkingLevel = "low"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimensions: int = 768
