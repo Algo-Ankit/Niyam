@@ -34,3 +34,14 @@ Format:
   gemma-4-31b-it gemma-4-26b-a4b-it` at commit 5cae7ba
 - Config: Gemini API free tier, Interactions API, no thinking level, 4 passages, no cache
 - Raw output: results/gen-bench-gemma.json
+
+## R4 2026-11-15 - Retrieval on 35 questions, keyword vs vector vs hybrid
+- Value: hit@1 / hit@3 / hit@5 / MRR@10. keyword 0.086 / 0.343 / 0.514 / 0.271; vector
+  0.857 / 0.943 / 0.943 / 0.903; hybrid (reciprocal rank fusion, k = 60) 0.486 / 0.714 / 0.743 /
+  0.614. All five vector misses at rank 1 had the gold paragraph's parent or sibling first.
+- Produced by: `uv run niyam eval-retrieval results/retrieval-eval-1.json` at commit d47d234
+- Config: gemini-embedding-2, 768 dimensions; 181 indexed provisions of 8 CFR 214.2(f), current
+  2026-10-14; keyword arm ORs the query words (plainto_tsquery) ranked by ts_rank_cd; 24
+  candidates per arm. Eval set evals/retrieval.jsonl was written by the builder and is not yet
+  owner-reviewed.
+- Raw output: results/retrieval-eval-1.json

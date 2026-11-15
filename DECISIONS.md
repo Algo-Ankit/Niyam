@@ -303,3 +303,11 @@ rendered by code, not by the model.
 *Why:* the model can phrase but can never be the source of a deadline. *Tradeoff:* about 2
 generator requests per question against 500 per day; a withheld explanation still shows the
 computed findings.
+
+**D47. Production retrieval is the vector arm alone.** Decided by the builder on 2026-11-15 under
+the owner's delegation. Supersedes the fusion part of D45. On R4, vector search scores hit@1
+0.857 and MRR@10 0.903; hybrid fusion scores 0.486 and 0.614, because the keyword arm (0.086 and
+0.271) gets equal weight and pushes good vector results down. Keyword and hybrid stay in the
+eval as comparison arms; the tsvector column stays for them.
+*Why:* the measured best arm. *Tradeoff:* the eval set is builder-written and small (35
+questions), so the choice should be re-checked once the owner has reviewed the set.

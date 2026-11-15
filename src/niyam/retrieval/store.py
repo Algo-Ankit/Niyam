@@ -1,4 +1,4 @@
-"""Postgres store: one row per provision with full-text and pgvector columns, plus hybrid search."""
+"""Postgres store: one row per provision with full-text and pgvector columns, and search."""
 
 import json
 from collections.abc import Sequence
@@ -78,15 +78,11 @@ def load_corpus(conn: psycopg.Connection, corpus_file: Path, embedder: Embedder)
 
 
 def search(conn: psycopg.Connection, embedder: Embedder, query: str, k: int = 8) -> list[Hit]:
-    """Keyword and vector search over the same rows, fused by reciprocal rank."""
-    vector = embed_query(embedder, query)
-    candidates = max(k * 3, 20)
-    rankings = [keyword_ranking(conn, query, candidates), vector_ranking(conn, vector, candidates)]
-    fused = fuse(rankings)[:k]
-    scores = dict(fused)
+    """The `k` provisions nearest to the query by meaning (vector arm, chosen by eval R4, D47)."""
+    ranked = vector_ranking(conn, embed_query(embedder, query), k)
+    scores = {citation: 1.0 / rank for rank, citation in enumerate(ranked, start=1)}
     return [
-        Hit(h.citation, h.headings, h.body, scores[h.citation])
-        for h in by_citation(conn, [c for c, _ in fused])
+        Hit(h.citation, h.headings, h.body, scores[h.citation]) for h in by_citation(conn, ranked)
     ]
 
 
