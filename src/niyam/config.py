@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr
     generation_model: str = "gemini-3.5-flash-lite"
     generation_thinking_level: ThinkingLevel = "low"
+    # Judge: a different model family from the generator, so it does not favour its style.
+    judge_model: str = "gemma-4-31b-it"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimensions: int = 768
 
@@ -52,6 +54,10 @@ class Settings(BaseSettings):
     )
     generation_limits: RateLimits = RateLimits(
         requests_per_minute=15, tokens_per_minute=250_000, requests_per_day=500
+    )
+    # Gemma: 30 RPM, 16K TPM, 14.4K RPD; tokens per minute is the limit that binds.
+    judge_limits: RateLimits = RateLimits(
+        requests_per_minute=30, tokens_per_minute=16_000, requests_per_day=14_400
     )
     embedding_limits: RateLimits = RateLimits(
         requests_per_minute=100, tokens_per_minute=30_000, requests_per_day=1_000

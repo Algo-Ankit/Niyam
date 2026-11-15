@@ -30,6 +30,7 @@ GEMINI = "gemini"
 class ModelSuite:
     decision: DecisionModel
     generator: GenerativeModel
+    judge: GenerativeModel
     embedder: Embedder
     ledger: CostLedger
     cache: ResponseCache
@@ -67,6 +68,16 @@ def build_models(settings: Settings, *, use_cache: bool = True) -> ModelSuite:
             max_retries=settings.max_rate_limit_retries,
         ),
     )
+    judge: GenerativeModel = MeteredGenerativeModel(
+        GeminiGenerativeModel(client, settings.judge_model),
+        Meter(
+            GEMINI,
+            settings.judge_model,
+            settings.judge_limits,
+            ledger,
+            max_retries=settings.max_rate_limit_retries,
+        ),
+    )
     embedder: Embedder = MeteredEmbedder(
         GeminiEmbedder(client, settings.embedding_model, settings.embedding_dimensions),
         Meter(
@@ -81,8 +92,9 @@ def build_models(settings: Settings, *, use_cache: bool = True) -> ModelSuite:
     if use_cache:
         decision = CachedDecisionModel(decision, cache, settings.decision_provider, CACHE_VERSION)
         generator = CachedGenerativeModel(generator, cache, GEMINI, CACHE_VERSION)
+        judge = CachedGenerativeModel(judge, cache, GEMINI, CACHE_VERSION)
         embedder = CachedEmbedder(embedder, cache, GEMINI, CACHE_VERSION)
-    return ModelSuite(decision, generator, embedder, ledger, cache)
+    return ModelSuite(decision, generator, judge, embedder, ledger, cache)
 
 
 def _decision_adapter(settings: Settings, api_key: str) -> DecisionModel:

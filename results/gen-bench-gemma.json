@@ -1,0 +1,78 @@
+[
+  {
+    "answer": {
+      "answer": "A full-KYC PPI may be issued up to a limit of Rs 2,00,000 outstanding at any point of time.",
+      "citations": [
+        "P1"
+      ],
+      "abstain": false
+    },
+    "tokens": 258,
+    "model": "gemma-4-31b-it",
+    "question": "What is the maximum balance a full-KYC PPI can hold?",
+    "seconds": 8.5
+  },
+  {
+    "answer": {
+      "answer": "Cash withdrawal using small PPIs is not permitted [P3], and for minimum-detail PPIs, the total amount loaded during the financial year shall not exceed Rs 1,20,000 [P2].",
+      "citations": [
+        "P2",
+        "P3"
+      ],
+      "abstain": false
+    },
+    "tokens": 282,
+    "model": "gemma-4-31b-it",
+    "question": "Can I withdraw cash from a minimum-detail PPI and what is the yearly load limit?",
+    "seconds": 23.21
+  },
+  {
+    "answer": {
+      "answer": "",
+      "citations": [],
+      "abstain": true
+    },
+    "tokens": 226,
+    "model": "gemma-4-31b-it",
+    "question": "What is the penalty for a bank missing the NEFT cut-off time?",
+    "seconds": 17.6
+  },
+  {
+    "answer": {
+      "answer": "A full-KYC PPI may be issued up to a limit of Rs 2,00,000 outstanding at any point of time.",
+      "citations": [
+        "P1"
+      ],
+      "abstain": false
+    },
+    "tokens": 258,
+    "model": "gemma-4-26b-a4b-it",
+    "question": "What is the maximum balance a full-KYC PPI can hold?",
+    "seconds": 4.23
+  },
+  {
+    "answer": {
+      "answer": "Cash withdrawal using small PPIs is not permitted, and for minimum-detail PPIs, the total amount loaded during the financial year shall not exceed Rs 1,20,000.",
+      "citations": [
+        "P2",
+        "P3"
+      ],
+      "abstain": false
+    },
+    "tokens": 275,
+    "model": "gemma-4-26b-a4b-it",
+    "question": "Can I withdraw cash from a minimum-detail PPI and what is the yearly load limit?",
+    "seconds": 5.27
+  },
+  {
+    "answer": {
+      "answer": "The provided passages do not contain information regarding the penalty for a bank missing the NEFT cut-off time.",
+      "citations": [],
+      "abstain": true
+    },
+    "tokens": 248,
+    "model": "gemma-4-26b-a4b-it",
+    "question": "What is the penalty for a bank missing the NEFT cut-off time?",
+    "seconds": 5.38
+  }
+]

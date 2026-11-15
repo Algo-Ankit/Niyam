@@ -120,11 +120,17 @@ class GeminiGenerativeModel:
         return self._model_id
 
     def generate[T: BaseModel](self, request: GenerationRequest[T]) -> GenerationResult[T]:
+        # NOTE: Gemma models reject `thinking_level` (HTTP 400), so it is sent only when set.
+        thinking: dict[str, Any] = (
+            {}
+            if request.thinking_level is None
+            else {"generation_config": {"thinking_level": request.thinking_level}}
+        )
         with _rate_limits_translated(self._model_id):
             raw = self._client.interactions.create(
                 model=self._model_id,
                 input=request.prompt,
-                generation_config={"thinking_level": request.thinking_level},
+                **thinking,
                 response_format={
                     "type": "text",
                     "mime_type": "application/json",

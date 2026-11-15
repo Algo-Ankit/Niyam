@@ -58,4 +58,4 @@ class EmbeddingResult:
 class GenerationRequest[T: BaseModel]:
     prompt: str
     schema: type[T]
-    thinking_level: ThinkingLevel
+    thinking_level: ThinkingLevel | None  # None for models without thinking levels (Gemma)

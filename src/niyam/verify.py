@@ -41,6 +41,7 @@ def run_checks(settings: Settings, models: ModelSuite) -> list[CheckResult]:
     checks: list[tuple[str, Callable[[], str]]] = [
         ("decision", lambda: _check_decision(models)),
         ("generation", lambda: _check_generation(settings, models)),
+        ("judge", lambda: _check_judge(models)),
         ("embedding", lambda: _check_embedding(models)),
         ("database", lambda: _check_database(settings)),
         ("langfuse", lambda: _check_langfuse(settings)),
@@ -73,17 +74,26 @@ def _check_decision(models: ModelSuite) -> str:
     return f"{models.decision.model_id} P(relevant)={p['relevant']:.2f} P(tax)={p['about_tax']:.2f}"
 
 
+_PROBE_PROMPT = (
+    "Answer only from the passage. If it does not answer the question, set abstain to true."
+    f"\n\nPassage: {_PASSAGE}\n\n<question>What is the limit for a full-KYC PPI?</question>"
+)
+
+
 def _check_generation(settings: Settings, models: ModelSuite) -> str:
-    prompt = (
-        "Answer only from the passage. If it does not answer the question, set abstain to true."
-        f"\n\nPassage: {_PASSAGE}\n\n<question>What is the limit for a full-KYC PPI?</question>"
-    )
     result = models.generator.generate(
-        GenerationRequest(prompt, _Probe, settings.generation_thinking_level)
+        GenerationRequest(_PROBE_PROMPT, _Probe, settings.generation_thinking_level)
     )
     if result.output.abstain or "2,00,000" not in result.output.answer:
         raise AssertionError(f"unexpected answer {result.output.answer[:80]!r}")
     return f"{models.generator.model_id} ok, {result.usage.total_tokens} tokens"
+
+
+def _check_judge(models: ModelSuite) -> str:
+    result = models.judge.generate(GenerationRequest(_PROBE_PROMPT, _Probe, None))
+    if result.output.abstain or "2,00,000" not in result.output.answer:
+        raise AssertionError(f"unexpected answer {result.output.answer[:80]!r}")
+    return f"{models.judge.model_id} ok, {result.usage.total_tokens} tokens"
 
 
 def _check_embedding(models: ModelSuite) -> str:

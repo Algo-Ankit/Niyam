@@ -8,6 +8,7 @@ import pytest
 from google.genai import errors
 from pydantic import BaseModel
 
+from niyam.config import ThinkingLevel
 from niyam.models.errors import ProviderResponseError, RateLimitedError
 from niyam.models.gemini import GeminiDecisionModel, GeminiEmbedder, GeminiGenerativeModel
 from niyam.models.types import EmbeddingInput, GenerationRequest
@@ -83,12 +84,18 @@ class Answer(BaseModel):
     answer: str
 
 
-def interactions_returning(text: str) -> Any:
+def interactions_returning(text: str, sent: dict[str, Any] | None = None) -> Any:
     usage = SimpleNamespace(
         total_input_tokens=400, total_output_tokens=80, total_thought_tokens=100
     )
     response = SimpleNamespace(output_text=text, usage=usage)
-    return SimpleNamespace(create=lambda **_: response)
+
+    def create(**kwargs: Any) -> SimpleNamespace:
+        if sent is not None:
+            sent.update(kwargs)
+        return response
+
+    return SimpleNamespace(create=create)
 
 
 def test_generation_parses_schema_and_usage() -> None:
@@ -96,6 +103,20 @@ def test_generation_parses_schema_and_usage() -> None:
     result = GeminiGenerativeModel(client, "h").generate(GenerationRequest("p", Answer, "low"))
     assert result.output.answer == "Rs 2,00,000"
     assert (result.usage.input_tokens, result.usage.thought_tokens) == (400, 100)
+
+
+def test_thinking_level_is_sent_only_when_set() -> None:
+    with_level: dict[str, Any] = {}
+    without: dict[str, Any] = {}
+    levels: list[tuple[dict[str, Any], ThinkingLevel | None]] = [
+        (with_level, "low"),
+        (without, None),
+    ]
+    for sent, level in levels:
+        client = stub_client(interactions=interactions_returning('{"answer": "x"}', sent))
+        GeminiGenerativeModel(client, "m").generate(GenerationRequest("p", Answer, level))
+    assert with_level["generation_config"] == {"thinking_level": "low"}
+    assert "generation_config" not in without
 
 
 def test_generation_invalid_json_is_a_provider_error() -> None:

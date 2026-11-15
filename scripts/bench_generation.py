@@ -53,10 +53,11 @@ def main() -> None:
     records = []
     for model in models:
         adapter = GeminiGenerativeModel(client, model)
+        level = None if model.startswith("gemma") else "low"  # Gemma has no thinking levels
         for question in QUESTIONS[:runs]:
             start = time.perf_counter()
             try:
-                result = adapter.generate(GenerationRequest(prompt_for(question), Answer, "low"))
+                result = adapter.generate(GenerationRequest(prompt_for(question), Answer, level))
                 record = {"answer": result.output.model_dump(), "tokens": result.usage.total_tokens}
             except Exception as error:  # record every failure, then keep benchmarking
                 record = {"error": f"{type(error).__name__}: {error}"[:300]}
@@ -64,7 +65,7 @@ def main() -> None:
             record["seconds"] = round(time.perf_counter() - start, 2)
             records.append(record)
             print(model, record["seconds"], record.get("error", record.get("tokens")))
-    out.write_text(json.dumps(records, indent=2), encoding="utf-8")
+            out.write_text(json.dumps(records, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":
