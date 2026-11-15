@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # Generative model (answers, judge) and embeddings.
     gemini_api_key: SecretStr
-    generation_model: str = "gemini-3.5-flash"
+    generation_model: str = "gemini-3.5-flash-lite"
     generation_thinking_level: ThinkingLevel = "low"
     embedding_model: str = "gemini-embedding-2"
     embedding_dimensions: int = 768
@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     decision_limits: RateLimits = RateLimits(
         requests_per_minute=200, tokens_per_minute=50_000, requests_per_day=10_000
     )
-    generation_limits: RateLimits = RateLimits()
+    generation_limits: RateLimits = RateLimits(
+        requests_per_minute=15, tokens_per_minute=250_000, requests_per_day=500
+    )
     embedding_limits: RateLimits = RateLimits(
         requests_per_minute=100, tokens_per_minute=30_000, requests_per_day=1_000
     )

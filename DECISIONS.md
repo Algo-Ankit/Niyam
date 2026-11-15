@@ -153,3 +153,12 @@ decide whether `gemini-3.6-flash` or the lite model is better; switching is one 
 **D34. Embedding limits set from AI Studio: 100 RPM, 30K TPM, 1K RPD.** Owner-confirmed on
 2026-11-15; the decision model's existing limits (200 RPM, 50K TPM, 10K RPD) matched AI Studio.
 Generation limits stay unset until the `gemini-3.5-flash` row is confirmed (see D33).
+
+**D35 (supersedes D33). `gemini-3.5-flash-lite` is the generative model, on the free tier.**
+AI Studio limits (owner-confirmed): 15 RPM, 250K TPM, 500 RPD. The 3.6, 3.8 and hydrogen models
+allow only 20 RPD, and `gemini-3.5-flash` has no listed limits or price. Lite was the fastest
+in R2 (3.4 to 3.9 s) and answered all three benchmark questions correctly.
+*Why:* the project goal is zero spend; 500 requests per day covers evaluation runs when the
+decision model (10K RPD) handles most checks and the generative judge is sampled.
+*Tradeoff:* the demo cap and CI must share the 500 requests; quality is checked on three
+questions only, so Phase 3 evals may justify a paid model later. No fallbacks.
