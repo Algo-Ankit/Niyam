@@ -239,3 +239,19 @@ stack. *Tradeoff:* the YouTube URL input is a preview feature and its pricing an
 change; free tier is 8 hours of YouTube video per day, public videos only; video tokens can
 exceed the generator's 250K tokens-per-minute limit on long videos (tokens per second not yet
 measured); YouTube Data API allows 100 search.list calls per day.
+
+**D42. The product is an F-1 student work-rules assistant (OPT and STEM OPT).** Owner-approved on
+2026-11-15. Supersedes D41; D38 (official government text only) applies again. Input: an F-1
+student's situation in plain words (program end date, OPT or STEM OPT dates, employment gaps,
+degree). Output, always the same shape: the rules that apply with the paragraph cited, the
+student's deadlines as dates, unemployment days used against the limit, and a "not covered" list
+(H-1B, green card, taxes, anything needing the DSO or a lawyer). The model only extracts facts;
+dates and day counts are computed by deterministic code; retrieval supplies the cited text.
+Corpus: 8 CFR 214.2(f) from the govinfo bulk eCFR XML (title 8 last modified 2026-10-15) and
+DHS Study in the States pages; both answered a clearly named client with 200 and their robots.txt
+allows the paths used. Evaluated per stage: extraction, rules engine (pytest from the regulation
+text), retrieval recall@k and MRR, grounding and correctness (calibrated judge), abstention.
+*Why:* a specific user with a costly problem (loss of status), no free tool that does the date
+math, and verified sources. *Tradeoff:* immigration rules change (DHS proposed an OPT fee rule on
+2026-10-08), so the corpus needs a freshness check; a ready-made DHS FAQ gold set is unconfirmed.
+Information, not legal advice.
