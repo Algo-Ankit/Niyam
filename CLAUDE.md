@@ -33,7 +33,7 @@
 - Toolchain is repo-local: `bash scripts/bootstrap.sh` creates .tools/ (uv, Python 3.12, uv cache) and .venv. No global installs, PATH/profile edits, or global git config.
 - `uv` below means `.tools/bootstrap/Scripts/uv.exe` (Windows) or `.tools/bootstrap/bin/uv`.
 - Quiet tests: `uv run pytest -q -x --tb=short`
-- Full suite: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` (the pre-commit hook in .githooks/ runs the first three).
+- Full suite: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` (the pre-commit hook in .githooks/ runs all four).
 - Run: `uv run niyam` (entry point niyam.cli:main). Live provider check: `uv run niyam verify-providers`.
 - Code: clean and readable; SOLID only where it earns its place; no speculative abstractions; no dead or commented-out code; typed, tested, explicit error handling.
 - Commits: one logical change per commit, with its DECISIONS.md entry in the same commit. Push after each verified unit; never push a failing build.

@@ -102,3 +102,9 @@ in it cites its R#N entry.
 *Why:* the log stays the single source of numbers; the report can be regenerated without
 editing history.
 *Tradeoff:* two files to keep consistent; the report is regenerated, never edited by hand.
+
+**D28. The pre-commit hook also runs `pytest -q`.** The full suite runs offline (verified with
+socket connections blocked) and in about a second, so it gates every commit alongside ruff and
+mypy. The live `verify-providers` check stays manual.
+*Why:* a failing test can no longer be committed by accident.
+*Tradeoff:* commits wait for the suite; revisit if it stops being fast or offline.
