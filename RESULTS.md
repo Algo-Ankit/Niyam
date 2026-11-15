@@ -58,3 +58,11 @@ Format:
   second run very likely reused the first run's extractions). Eval set evals/extraction.jsonl was
   written by the builder and is not yet owner-reviewed.
 - Raw output: results/extraction-eval-2.json
+
+## R6 2026-11-15 - Fact extraction after the "no invented jobs" prompt rule
+- Value: field accuracy 1.0; all fields correct 1.0 (15 of 15); out-of-scope correct 1.0;
+  deadlines agree 1.0 (11 of 11). Optimistic: the prompt was changed after reading the R5 miss
+  on this same set, and there is no held-out set yet.
+- Produced by: `uv run niyam eval-extraction results/extraction-eval-3.json` at commit a5c2d6f
+- Config: as R5; the prompt change means no cached responses were reused.
+- Raw output: results/extraction-eval-3.json
