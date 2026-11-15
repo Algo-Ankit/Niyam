@@ -1,9 +1,12 @@
 """Command-line entry point: `uv run niyam <command>`."""
 
 import argparse
+import json
+import subprocess
 import sys
 from contextlib import closing
-from datetime import date
+from dataclasses import asdict
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import psycopg
@@ -11,6 +14,7 @@ import psycopg
 from niyam.assistant import pipeline
 from niyam.config import get_settings
 from niyam.corpus import build, download
+from niyam.evals import retrieval as retrieval_eval
 from niyam.models.factory import build_models
 from niyam.retrieval import store
 from niyam.verify import run_checks
@@ -18,6 +22,7 @@ from niyam.verify import run_checks
 RAW_TITLE_8 = Path("data/raw/ECFR-title8.xml")
 MANIFEST = Path("data/manifest.json")
 F1_CORPUS = Path("data/processed/8-cfr-214.2-f.json")
+RETRIEVAL_SET = Path("evals/retrieval.jsonl")
 
 
 def _verify_providers() -> int:
@@ -102,6 +107,39 @@ def _ask(message: str, as_of: date) -> int:
     return 0
 
 
+def _eval_retrieval(output: Path) -> int:
+    settings = get_settings()
+    items = retrieval_eval.load_items(RETRIEVAL_SET)
+    with closing(build_models(settings)) as models, _connect() as conn:
+        ranked = retrieval_eval.run(conn, models.embedder, items)
+    scores = retrieval_eval.metrics(ranked)
+    report = {
+        "run_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "commit": _commit(),
+        "eval_set": RETRIEVAL_SET.as_posix(),
+        "items": len(items),
+        "embedding_model": settings.embedding_model,
+        "metrics": scores,
+        "rankings": [asdict(r) for r in ranked],
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    for arm, values in scores.items():
+        print(f"{arm:<8} " + "  ".join(f"{name}={value:.3f}" for name, value in values.items()))
+    print(f"{len(items)} questions; raw output in {output}")
+    return 0
+
+
+def _commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607  # git from PATH by design
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
 def _connect() -> psycopg.Connection:
     return psycopg.connect(get_settings().database_url.get_secret_value(), connect_timeout=20)
 
@@ -115,6 +153,8 @@ def main() -> None:
     commands.add_parser("index", help="embed the processed corpus and load it into Postgres")
     search = commands.add_parser("search", help="hybrid search over the indexed provisions")
     search.add_argument("query")
+    evaluate = commands.add_parser("eval-retrieval", help="score retrieval arms on the eval set")
+    evaluate.add_argument("output", type=Path, help="where to save the raw JSON report")
     ask = commands.add_parser("ask", help="answer an F-1 student's question")
     ask.add_argument("message")
     ask.add_argument("--as-of", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD")
@@ -130,5 +170,7 @@ def main() -> None:
         sys.exit(_index())
     if args.command == "search":
         sys.exit(_search(args.query))
+    if args.command == "eval-retrieval":
+        sys.exit(_eval_retrieval(args.output))
     if args.command == "ask":
         sys.exit(_ask(args.message, args.as_of))

@@ -79,28 +79,41 @@ def load_corpus(conn: psycopg.Connection, corpus_file: Path, embedder: Embedder)
 
 def search(conn: psycopg.Connection, embedder: Embedder, query: str, k: int = 8) -> list[Hit]:
     """Keyword and vector search over the same rows, fused by reciprocal rank."""
-    vector = embedder.embed([EmbeddingInput(query, "query")]).vectors[0]
+    vector = embed_query(embedder, query)
     candidates = max(k * 3, 20)
-    keyword = conn.execute(
-        # NOTE: plainto_tsquery ANDs every word, so full questions rarely match; OR them instead
-        # and let ts_rank_cd reward provisions that cover more of the words.
-        "SELECT citation FROM provisions,"
-        " to_tsquery('english', replace(plainto_tsquery('english', %s)::text, '&', '|')) AS q"
-        " WHERE tsv @@ q ORDER BY ts_rank_cd(tsv, q) DESC LIMIT %s",
-        (query, candidates),
-    ).fetchall()
-    semantic = conn.execute(
-        "SELECT citation FROM provisions ORDER BY embedding <=> %s::vector LIMIT %s",
-        (_literal(vector), candidates),
-    ).fetchall()
-    fused = fuse([[c for (c,) in keyword], [c for (c,) in semantic]])[:k]
-    if not fused:
-        return []
+    rankings = [keyword_ranking(conn, query, candidates), vector_ranking(conn, vector, candidates)]
+    fused = fuse(rankings)[:k]
     scores = dict(fused)
     return [
         Hit(h.citation, h.headings, h.body, scores[h.citation])
         for h in by_citation(conn, [c for c, _ in fused])
     ]
+
+
+def embed_query(embedder: Embedder, query: str) -> list[float]:
+    return embedder.embed([EmbeddingInput(query, "query")]).vectors[0]
+
+
+def keyword_ranking(conn: psycopg.Connection, query: str, limit: int) -> list[str]:
+    """Citations matching any query word, best ts_rank_cd first."""
+    rows = conn.execute(
+        # NOTE: plainto_tsquery ANDs every word, so full questions rarely match; OR them instead
+        # and let ts_rank_cd reward provisions that cover more of the words.
+        "SELECT citation FROM provisions,"
+        " to_tsquery('english', replace(plainto_tsquery('english', %s)::text, '&', '|')) AS q"
+        " WHERE tsv @@ q ORDER BY ts_rank_cd(tsv, q) DESC LIMIT %s",
+        (query, limit),
+    ).fetchall()
+    return [c for (c,) in rows]
+
+
+def vector_ranking(conn: psycopg.Connection, vector: Sequence[float], limit: int) -> list[str]:
+    """Citations by cosine distance to `vector`, nearest first."""
+    rows = conn.execute(
+        "SELECT citation FROM provisions ORDER BY embedding <=> %s::vector LIMIT %s",
+        (_literal(vector), limit),
+    ).fetchall()
+    return [c for (c,) in rows]
 
 
 def by_citation(conn: psycopg.Connection, citations: Sequence[str]) -> list[Hit]:
