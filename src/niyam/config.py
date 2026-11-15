@@ -51,7 +51,9 @@ class Settings(BaseSettings):
         requests_per_minute=200, tokens_per_minute=50_000, requests_per_day=10_000
     )
     generation_limits: RateLimits = RateLimits()
-    embedding_limits: RateLimits = RateLimits()
+    embedding_limits: RateLimits = RateLimits(
+        requests_per_minute=100, tokens_per_minute=30_000, requests_per_day=1_000
+    )
     max_rate_limit_retries: int = Field(default=0, ge=0)
 
     # Observability and storage.

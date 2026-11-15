@@ -52,8 +52,11 @@ even when none fits; scores are weighted averages. Numbers and dates stay verifi
 Same Interactions API call as before (`client.interactions.create` with `thinking_level` and a
 JSON `response_format`); only the model id changed. Latency on one RAG-shaped prompt, free tier,
 thinking `low`: 3.5-flash 4.2 to 6.7 s (R1, R2). Candidates `gemini-3.6-flash` (3.7 to 6.0 s)
-and `gemini-3.5-flash-lite` (3.4 to 3.9 s) were also fast and correct (R2). Free tier limits for
-3.5-flash are only shown in AI Studio: **owner to provide**; until then they are unset in config.
+and `gemini-3.5-flash-lite` (3.4 to 3.9 s) were also fast and correct (R2). Free tier limits
+(AI Studio, owner-confirmed 2026-11-15; the page shows used / limit): 3.6-flash, 3.8-flash and
+hydrogen 5 RPM, 250K TPM, **20 RPD**; 3.5-flash-lite 15 RPM, 250K TPM, **500 RPD**;
+decisions 200 RPM, 50K TPM, 10K RPD. **`gemini-3.5-flash` was not in the pasted list**, so its
+limits are unconfirmed and unset in config.
 
 Not chosen: `gemini-4-hydrogen` took 8.2 to 36.4 s (R1; earlier manual probes saw 30 to 76 s).
 `gemini-3.7-flash` and `gemini-3.8-flash` took 63 to 226 s and wrongly abstained on one
@@ -68,7 +71,7 @@ answerable question (R1). Three questions per model is a smoke test, not a quali
 | Max input | 8,192 tokens, longer input "silently truncated" | docs |
 | **Batching** | a plain list of strings returns **one aggregated vector**; wrap each text in its own `types.Content` to get one vector per text | docs, measured |
 | Max items per request | not stated; whether 8,192 tokens is per item or per request is unverified (test in Phase 1) | — |
-| Free tier limits | owner to provide from AI Studio | — |
+| Free tier limits | 100 RPM, 30K TPM, 1K RPD | AI Studio, owner-confirmed 2026-11-15 |
 
 Measured: 4 texts sent as separate `Content`s returned 4 unit vectors in 947 ms using 109
 tokens; the query's nearest document was the correct clause (cosine 0.833 vs 0.653 and 0.669).

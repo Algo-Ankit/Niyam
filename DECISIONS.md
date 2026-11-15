@@ -149,3 +149,7 @@ answer. 3.6-flash (3.7 to 6.0 s) and 3.5-flash-lite (3.4 to 3.9 s) were also fas
 faster but the answer text was not compared at scale.
 *Tradeoff:* three questions per model is a smoke test, not a quality comparison. Phase 3 evals
 decide whether `gemini-3.6-flash` or the lite model is better; switching is one config value.
+
+**D34. Embedding limits set from AI Studio: 100 RPM, 30K TPM, 1K RPD.** Owner-confirmed on
+2026-11-15; the decision model's existing limits (200 RPM, 50K TPM, 10K RPD) matched AI Studio.
+Generation limits stay unset until the `gemini-3.5-flash` row is confirmed (see D33).
