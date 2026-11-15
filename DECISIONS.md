@@ -162,3 +162,14 @@ in R2 (3.4 to 3.9 s) and answered all three benchmark questions correctly.
 decision model (10K RPD) handles most checks and the generative judge is sampled.
 *Tradeoff:* the demo cap and CI must share the 500 requests; quality is checked on three
 questions only, so Phase 3 evals may justify a paid model later. No fallbacks.
+
+**D36. `gemma-4-31b-it` is the judge; the generator stays `gemini-3.5-flash-lite`.** Gemma is a
+different model family from the generator, so the judge does not favour the generator's style.
+Free limits (owner-confirmed): 30 RPM, 16K TPM, 14,400 RPD, so judging never competes with the
+generator's 500 requests per day. Answered the benchmark correctly (R3). The adapter now sends
+`thinking_level` only when set, because Gemma rejects it (HTTP 400).
+*Why:* tokens per minute binds, not requests: a 4K-token judge call fits about 4 per minute, so
+judging 150 answers takes about 40 minutes. Fine for offline evals, too slow for live answers.
+*Tradeoff:* latency is erratic (4 to 128 s); judge agreement with human labels is unmeasured
+until Phase 3 validates it, as the context file requires. `gemma-4-26b-a4b-it` is the faster
+fallback by config, not automatic.

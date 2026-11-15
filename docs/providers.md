@@ -62,6 +62,15 @@ Not chosen: `gemini-4-hydrogen` took 8.2 to 36.4 s (R1; earlier manual probes sa
 `gemini-3.7-flash` and `gemini-3.8-flash` took 63 to 226 s and wrongly abstained on one
 answerable question (R1). Three questions per model is a smoke test, not a quality comparison.
 
+## Judge model: `gemma-4-31b-it` (in use, D36)
+
+Hosted Gemma 4 on the Gemini API, same Interactions call without `thinking_level` (Gemma returns
+HTTP 400 "Thinking level is not supported"). Free limits (AI Studio, owner-confirmed 2026-11-15):
+30 RPM, 16K TPM, 14,400 RPD, so tokens per minute is the binding limit. Latency 8.5 to 23 s in
+R3, erratic in earlier runs (4.8 to 128 s). `gemma-4-26b-a4b-it` (same limits) took 4.2 to 5.4 s.
+Failed requests count against the daily limit (the 400s did). Judge quality against human labels
+is unmeasured until Phase 3.
+
 ## Embeddings: `gemini-embedding-2`
 
 | Item | Value | Source |

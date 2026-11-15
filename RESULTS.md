@@ -24,3 +24,13 @@ Format:
   gemini-3.5-flash gemini-3.5-flash-lite gemini-3.6-flash` at commit a938193
 - Config: as R1
 - Raw output: results/gen-bench-round2.json
+
+## R3 2026-11-15 - Gemma 4 as judge candidate, same RAG-shaped prompt
+- Value: seconds per call (3 calls each). gemma-4-31b-it 8.5, 23.21, 17.6; gemma-4-26b-a4b-it
+  4.23, 5.27, 5.38. All six answers cited and abstained correctly (31B's abstention answer
+  text was empty). An earlier run was cut off by a tool timeout, with calls of 4.8 to 128.5 s,
+  so latency is erratic. `verify-providers` judge check: 15.0 s.
+- Produced by: `uv run python scripts/bench_generation.py results/gen-bench-gemma.json 3
+  gemma-4-31b-it gemma-4-26b-a4b-it` at commit 5cae7ba
+- Config: Gemini API free tier, Interactions API, no thinking level, 4 passages, no cache
+- Raw output: results/gen-bench-gemma.json
