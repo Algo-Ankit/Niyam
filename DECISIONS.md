@@ -133,3 +133,9 @@ push, replacing its "do not commit unless I ask" rule.
 *Why:* the setup requires `HANDOVER.md` to be tracked, and leaving it staged let it drift from
 the commits it describes.
 *Tradeoff:* one extra commit per session in the history.
+
+**D32. Quota and budget checks reserve in-flight calls.** `Meter` counts calls that have started
+but not yet been recorded, under a lock, when it checks the daily quota and the budget.
+*Why:* the check ran before the call and the ledger write after it, so parallel callers
+(Phase 2 re-ranking, eval runs) could all pass the check and overshoot the limit.
+*Tradeoff:* a retried call is counted twice for a moment, which errs on the side of stopping.

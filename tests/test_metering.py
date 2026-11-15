@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 import pytest
@@ -83,3 +84,22 @@ def test_no_retries_by_default_stops_on_first_429(ledger: CostLedger) -> None:
     with pytest.raises(RateLimitedError):
         meter.run(1, limited, lambda _: Usage())
     assert slept == []
+
+
+def test_concurrent_calls_cannot_overshoot_the_daily_quota(ledger: CostLedger) -> None:
+    meter, _ = make_meter(ledger, limits=RateLimits(requests_per_day=1))
+    started, release = threading.Event(), threading.Event()
+
+    def slow() -> str:
+        started.set()
+        release.wait(timeout=5)
+        return "ok"
+
+    first = threading.Thread(target=lambda: meter.run(1, slow, lambda _: Usage()))
+    first.start()
+    assert started.wait(timeout=5)
+    with pytest.raises(QuotaExhaustedError):
+        meter.run(1, lambda: "never", lambda _: Usage())
+    release.set()
+    first.join()
+    assert ledger.requests_today("m") == 1

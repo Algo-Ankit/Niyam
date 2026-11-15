@@ -4,6 +4,7 @@
 without the adapters knowing about limits, retries or cost.
 """
 
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 
@@ -47,6 +48,9 @@ class Meter:
         self._price = usd_per_million_input_tokens / 1_000_000
         self._max_retries = max_retries
         self._sleep = sleep
+        self._reservation_lock = threading.Lock()
+        self._in_flight = 0
+        self._in_flight_cost = 0.0
         self._limiter = SlidingWindowLimiter(
             limits.requests_per_minute, limits.tokens_per_minute, sleep=sleep
         )
@@ -54,8 +58,16 @@ class Meter:
     def run[R](
         self, estimated_tokens: int, call: Callable[[], R], usage_of: Callable[[R], Usage]
     ) -> R:
-        self._check_daily_quota()
-        self._check_budget(estimated_tokens * self._price)
+        estimated_cost = estimated_tokens * self._price
+        self._reserve(estimated_cost)
+        try:
+            return self._attempt(estimated_tokens, call, usage_of)
+        finally:
+            self._release(estimated_cost)
+
+    def _attempt[R](
+        self, estimated_tokens: int, call: Callable[[], R], usage_of: Callable[[R], Usage]
+    ) -> R:
         for attempt in range(self._max_retries + 1):
             self._limiter.acquire(estimated_tokens)
             try:
@@ -74,16 +86,32 @@ class Meter:
                 return result
         raise AssertionError("unreachable: the loop returns or raises")
 
+    # NOTE: quota and budget count calls still in flight, so concurrent callers cannot overshoot.
+    def _reserve(self, estimated_cost: float) -> None:
+        with self._reservation_lock:
+            self._check_daily_quota()
+            self._check_budget(estimated_cost)
+            self._in_flight += 1
+            self._in_flight_cost += estimated_cost
+
+    def _release(self, estimated_cost: float) -> None:
+        with self._reservation_lock:
+            self._in_flight -= 1
+            self._in_flight_cost -= estimated_cost
+
     def _check_daily_quota(self) -> None:
         limit = self._limits.requests_per_day
-        if limit is not None and self._ledger.requests_today(self.model_id) >= limit:
+        if (
+            limit is not None
+            and self._ledger.requests_today(self.model_id) + self._in_flight >= limit
+        ):
             raise QuotaExhaustedError(f"{self.model_id}: daily limit of {limit} requests reached")
 
     def _check_budget(self, estimated_cost: float) -> None:
         if self._budget_usd is None:
             return
         spent = self._ledger.spend_usd(self.provider)
-        if spent + estimated_cost > self._budget_usd:
+        if spent + self._in_flight_cost + estimated_cost > self._budget_usd:
             raise BudgetExceededError(
                 f"{self.provider}: spent {spent:.6f} USD, call would exceed the "
                 f"{self._budget_usd:.2f} USD budget"
