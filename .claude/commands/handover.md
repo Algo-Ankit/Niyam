@@ -19,4 +19,4 @@ The single exact next action, specific enough to start without re-reading the co
 
 Last line: "Records: DECISIONS.md latest #N, RESULTS.md latest R#N."
 
-Rules: facts only, no padding, no metrics without a RESULTS.md entry. After writing, print only the line count and the Next step line. Do not commit unless I ask.
+Rules: facts only, no padding, no metrics without a RESULTS.md entry. After writing, commit HANDOVER.md alone as its own small commit and push it, then print only the line count and the Next step line.

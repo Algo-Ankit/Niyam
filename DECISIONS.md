@@ -126,3 +126,10 @@ previous conversation.
 *Why:* the old name shadowed Claude Code's built-in `/resume` session picker and suggested the
 command restores a conversation.
 *Tradeoff:* the habit of typing `/resume` now opens the built-in picker instead.
+
+**D31. `HANDOVER.md` is committed and pushed after every `/handover`.** Each handover is its own
+small commit containing only `HANDOVER.md`. The `/handover` command now ends with that commit and
+push, replacing its "do not commit unless I ask" rule.
+*Why:* the setup requires `HANDOVER.md` to be tracked, and leaving it staged let it drift from
+the commits it describes.
+*Tradeoff:* one extra commit per session in the history.
