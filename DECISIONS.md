@@ -344,3 +344,14 @@ error, quota or budget), `niyam ask` keeps the vector top 5 and the reply says r
 failed; `eval-pipeline` exits with the error so no score mixes reranked and unreranked replies.
 *Why:* a student still gets the computed deadlines, which never depend on retrieval order.
 *Tradeoff:* a degraded reply may cite less relevant provisions; the note makes that visible.
+
+**D51. The H-1B cap-gap rules of 214.2(f) are in scope.** Owner-approved on 2026-11-16. A
+student whose employer filed a cap-subject H-1B change-of-status petition is answered from
+8 CFR 214.2(f)(5)(vii): status and OPT work authorisation extend to April 1 of the fiscal year
+or the petition's validity start date, whichever is earlier, and end on rejection, denial,
+revocation or withdrawal, or when change of status is denied (consular processing). The rules
+engine will compute the extension end date; "H-1B" leaves the not-covered list, which keeps the
+lottery, specialty-occupation rules and the petition itself (8 CFR 214.2(h), not indexed).
+*Why:* the indexed regulation answers it, and it is a deadline students get wrong. *Tradeoff:*
+the departure period after a terminated extension is not stated in (f)(5)(vii); SEVP's page
+says 60 days but predates the 2026 rule that set (f)(5)(v) to 30, so the reply must flag it.
