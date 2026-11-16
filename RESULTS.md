@@ -90,3 +90,15 @@ Format:
   evals/retrieval-test.jsonl --hyde` at commit 90af482
 - Config: as R7. Set evals/retrieval-test.jsonl (the R4 questions), builder-written.
 - Raw output: results/retrieval-test-1.json
+
+## R9 2026-11-16 - Retrieval dev split (60 questions), vector vs vector + rerank
+- Value: hit@1 / hit@3 / hit@5 / MRR@10. vector 0.900 / 0.967 / 0.967 / 0.936; vector+rerank
+  0.983 / 1.000 / 1.000 / 0.989. Paired 95% bootstrap, rerank minus vector: hit@1 +0.083
+  [+0.000, +0.183], MRR@10 +0.053 [+0.000, +0.112]. Per question at rank 1: 6 fixed, 1 broken,
+  1 still wrong (d31). Keyword and hybrid as before (0.183 and 0.500 hit@1).
+- Produced by: `uv run niyam eval-retrieval results/retrieval-dev-rerank-1.json --rerank` at
+  commit 992eece (fixed/broken counts from the raw rankings)
+- Config: gemini-embedding-2 (768); vector top 10 reranked by gemini-decision-1, one yes/no
+  question per candidate in one request, ties in vector order (D49); 24 candidates per arm;
+  2,000 bootstrap resamples, seed 0. Set evals/retrieval-dev.jsonl, builder-written.
+- Raw output: results/retrieval-dev-rerank-1.json
