@@ -18,6 +18,7 @@ Status = Literal[
 ]
 
 _CFR = "8 CFR 214.2(f)"
+_STEM_MIN_HOURS = 20  # (f)(10)(ii)(C)(8): "not ... less than 20 hours per week"
 _BUSINESS_DAYS = (
     "Business days exclude weekends and US federal holidays (not defined in the paragraph)."
 )
@@ -27,6 +28,14 @@ class Job(BaseModel):
     employer: str = Field(default="", description="Employer name, if given")
     start: date = Field(description="First day of this job")
     end: date | None = Field(default=None, description="Last day of this job; null if ongoing")
+    related_to_major: bool | None = Field(
+        default=None,
+        description="Whether the student says this job is directly related to their major; "
+        "null if they did not say",
+    )
+    hours_per_week: int | None = Field(
+        default=None, description="Hours worked per week, if the student said"
+    )
 
 
 class StudentFacts(BaseModel):
@@ -84,6 +93,7 @@ def assess(facts: StudentFacts, as_of: date) -> Assessment:
             missing.extend(n for n in absent if n not in missing)
         else:
             findings.extend(rule(facts, as_of))
+    missing.extend(_unconfirmed_job_facts(facts))
     return Assessment(tuple(findings), tuple(missing))
 
 
@@ -136,7 +146,8 @@ def _unemployment(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
     limit = 150 if stem else 90
     authorized_end = _stem_end(facts) if stem else facts.opt_end_date
     last_day = min(as_of, authorized_end) if authorized_end else as_of
-    used = _days_without_a_job(start, last_day, facts.jobs, as_of)
+    stem_start = _known(facts.opt_end_date) + timedelta(days=1) if stem else None
+    used = _days_without_a_job(start, last_day, facts.jobs, as_of, stem_start)
     status: Status = "over_limit" if used > limit else "within_limit"
     yield Finding(
         "unemployment_days",
@@ -145,9 +156,27 @@ def _unemployment(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
         status,
         assumptions=(
             "Counting starts on the OPT EAD start date (SEVP practice; the regulation is silent).",
-            "Every job listed is treated as qualifying OPT employment.",
+            *_job_assumptions(facts.jobs, stem_start),
         ),
     )
+
+
+def _job_assumptions(jobs: list[Job], stem_start: date | None) -> Iterable[str]:
+    """How each job was counted, where the student did not say what the rule needs."""
+    for job in jobs:
+        name = job.employer or f"the job starting {job.start}"
+        if job.related_to_major is False:
+            yield f"{name} is not related to the major, so its days count as unemployment."
+        elif job.related_to_major is None:
+            yield (
+                f"{name} is taken to be directly related to the major ((f)(10)(ii)(A)); "
+                "if it is not, its days count as unemployment."
+            )
+        if _in_stem_period(job, stem_start) and job.hours_per_week is None:
+            yield (
+                f"{name} is taken to be at least {_STEM_MIN_HOURS} hours a week during STEM OPT "
+                "((f)(10)(ii)(C)(8)); fewer hours would not count as employment."
+            )
 
 
 def _stem_filing_window(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
@@ -259,15 +288,40 @@ def _stem_end(facts: StudentFacts) -> date:
     return add_months(start, 24) - timedelta(days=1)
 
 
-def _days_without_a_job(first: date, last: date, jobs: list[Job], as_of: date) -> int:
+def _days_without_a_job(
+    first: date, last: date, jobs: list[Job], as_of: date, stem_start: date | None
+) -> int:
+    """Days from `first` to `last` not covered by qualifying employment.
+
+    A job does not qualify if the student says it is unrelated to the major, and during a STEM
+    extension (from `stem_start`) if it is under 20 hours a week. Unknown facts count as
+    qualifying; `_job_assumptions` says so and `_unconfirmed_job_facts` asks for them.
+    """
     employed: set[date] = set()
     for job in jobs:
+        if job.related_to_major is False:
+            continue
+        part_time = job.hours_per_week is not None and job.hours_per_week < _STEM_MIN_HOURS
         day, job_last = max(job.start, first), min(job.end or as_of, last)
         while day <= job_last:
-            employed.add(day)
+            if not (part_time and stem_start is not None and day >= stem_start):
+                employed.add(day)
             day += timedelta(days=1)
     total = (last - first).days + 1
     return max(total, 0) - len(employed)
+
+
+def _unconfirmed_job_facts(facts: StudentFacts) -> Iterable[str]:
+    """Job facts the unemployment count assumed, so the assistant asks for them."""
+    if any(job.related_to_major is None for job in facts.jobs):
+        yield "whether each job is directly related to your major"
+    stem_start = _known(facts.opt_end_date) + timedelta(days=1) if facts.on_stem_extension else None
+    if any(_in_stem_period(j, stem_start) and j.hours_per_week is None for j in facts.jobs):
+        yield "hours per week of each job during STEM OPT"
+
+
+def _in_stem_period(job: Job, stem_start: date | None) -> bool:
+    return stem_start is not None and (job.end is None or job.end >= stem_start)
 
 
 def _window(opens: date, closes: date, as_of: date) -> Status:

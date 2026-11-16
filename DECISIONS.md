@@ -355,3 +355,14 @@ lottery, specialty-occupation rules and the petition itself (8 CFR 214.2(h), not
 *Why:* the indexed regulation answers it, and it is a deadline students get wrong. *Tradeoff:*
 the departure period after a terminated extension is not stated in (f)(5)(vii); SEVP's page
 says 60 days but predates the 2026 rule that set (f)(5)(v) to 30, so the reply must flag it.
+
+**D52. Only qualifying jobs stop the unemployment clock.** Owner-approved on 2026-11-16.
+Supersedes convention (2) of D44. A job counts as employment only if it is directly related to
+the major (8 CFR 214.2(f)(10)(ii)(A)) and, during a STEM extension, at least 20 hours a week
+((f)(10)(ii)(C)(8)); regular OPT has no hours minimum in the text. A job the student calls
+unrelated counts as unemployment. When the student did not say, the job is counted, the
+assumption is shown on the finding, and the missing fact is asked for. Basis: a fact-check
+against official sources found no support for "every job counts".
+*Why:* the old convention under-counted unemployment for students in unrelated jobs, which is
+the costly direction. *Tradeoff:* more follow-up questions; "related to the major" is the
+student's own judgement, not something code can verify.

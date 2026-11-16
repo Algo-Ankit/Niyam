@@ -150,3 +150,64 @@ def test_every_cited_paragraph_exists_in_the_corpus() -> None:
     }
     assert len(cited) == 11, sorted(cited)  # every rule's paragraph is exercised
     assert cited <= citations, cited - citations
+
+
+def test_a_job_unrelated_to_the_major_counts_as_unemployment() -> None:
+    facts = StudentFacts(
+        opt_start_date=date(2026, 6, 1),
+        opt_end_date=date(2027, 5, 31),
+        jobs=[
+            Job(
+                employer="Cafe",
+                start=date(2026, 6, 1),
+                end=date(2026, 8, 10),
+                related_to_major=False,
+            )
+        ],
+    )
+    finding = _by_rule(facts, date(2026, 9, 8))["unemployment_days"]
+    assert finding.summary.startswith("100 of 90 allowed days")
+    assert finding.status == "over_limit"
+    assert "Cafe is not related to the major" in " ".join(finding.assumptions)
+
+
+def test_under_20_hours_does_not_count_during_stem_but_does_before_it() -> None:
+    part_time = Job(start=date(2027, 5, 1), end=None, related_to_major=True, hours_per_week=15)
+    facts = StudentFacts(
+        opt_start_date=date(2026, 6, 1),
+        opt_end_date=date(2027, 5, 31),
+        on_stem_extension=True,
+        jobs=[Job(start=date(2026, 6, 1), end=date(2027, 4, 30), related_to_major=True), part_time],
+    )
+    # May 2027 is covered (no hours minimum on regular OPT); June 1 to 10 under STEM is not.
+    finding = _by_rule(facts, date(2027, 6, 10))["unemployment_days"]
+    assert finding.summary.startswith("10 of 150 allowed days")
+
+
+def test_unknown_job_facts_are_assumed_visibly_and_asked_for() -> None:
+    facts = StudentFacts(
+        opt_start_date=date(2026, 6, 1),
+        opt_end_date=date(2027, 5, 31),
+        on_stem_extension=True,
+        jobs=[Job(employer="Acme", start=date(2026, 6, 1), end=None)],
+    )
+    assessment = assess(facts, date(2027, 7, 1))
+    unemployment = next(f for f in assessment.findings if f.rule == "unemployment_days")
+    assert unemployment.summary.startswith("0 of 150")
+    joined = " ".join(unemployment.assumptions)
+    assert "Acme is taken to be directly related to the major" in joined
+    assert "Acme is taken to be at least 20 hours a week" in joined
+    assert "whether each job is directly related to your major" in assessment.missing
+    assert "hours per week of each job during STEM OPT" in assessment.missing
+
+
+def test_confirmed_jobs_need_no_questions() -> None:
+    facts = StudentFacts(
+        opt_start_date=date(2026, 6, 1),
+        jobs=[Job(start=date(2026, 6, 1), end=None, related_to_major=True)],
+    )
+    assert assess(facts, date(2026, 7, 1)).missing == (
+        "program_end_date",
+        "opt_end_date",
+        "stem_degree",
+    )
