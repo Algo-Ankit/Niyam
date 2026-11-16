@@ -378,3 +378,15 @@ processing petition gets no extension; a pending or approved change-of-status pe
 the ordinary departure finding with the extension end date.
 *Why:* leaving early costs less than overstaying. *Tradeoff:* students may plan for 30 days
 when DHS would allow 60; the reply says so and points to the DSO.
+
+**D54. Independent eval sets are scored against their own hand-derived gold.** Decided by the
+builder on 2026-11-16 under the owner's go-ahead for step 5. The sets in evals/independent/
+were written by an agent that never saw this codebase (owner's request), from the regulation
+only. `eval-edge` scores the full reply the student sees: code checks every expected deadline
+date and day count against the computed findings, asking when facts are missing, citing a gold
+paragraph, declining out-of-scope parts, and (security cases only) literal leaks such as an
+echoed SSN; the judge checks only the must-say and must-not-say points. Results are reported
+per category, per confidence and for ambiguous cases separately. Unlike the pipeline eval, gold
+deadlines never come from our own rules engine.
+*Why:* removes the builder grading its own homework. *Tradeoff:* the gold is still model-
+written until the owner's review; about 3 to 4 model requests per case.

@@ -125,6 +125,30 @@ def fact_dates(facts: StudentFacts) -> frozenset[str]:
     return frozenset(d.isoformat() for d in dates if isinstance(d, date))
 
 
+def render(reply: Reply) -> str:
+    """The reply exactly as the student sees it."""
+    lines = [f"Question: {reply.extraction.question}", ""]
+    for finding in reply.assessment.findings:
+        lines.append(f"- [{finding.status}] {finding.summary} ({finding.citation})")
+        lines.extend(f"    assumption: {a}" for a in finding.assumptions)
+    if reply.assessment.missing:
+        missing = ", ".join(reply.assessment.missing)
+        lines += ["", f"Tell me these to compute more deadlines: {missing}"]
+    lines.append("")
+    if reply.rejected_reason is None:
+        lines.append(reply.explanation.explanation)
+        lines.append(f"Sources: {', '.join(reply.explanation.citations)}")
+    else:
+        lines.append(f"Explanation withheld: it {reply.rejected_reason}.")
+    if reply.rerank_error is not None:
+        lines.append(f"Note: reranking failed ({reply.rerank_error}); sources are in search order.")
+    if reply.extraction.out_of_scope:
+        topics = ", ".join(reply.extraction.out_of_scope)
+        lines += ["", f"Not covered: {topics}. {NOT_COVERED}"]
+    lines += ["", DISCLAIMER]
+    return "\n".join(lines)
+
+
 def extract(
     message: str, as_of: date, generator: GenerativeModel, thinking_level: ThinkingLevel | None
 ) -> Extraction:

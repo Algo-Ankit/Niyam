@@ -15,6 +15,7 @@ from niyam.assistant import pipeline
 from niyam.config import get_settings
 from niyam.corpus import build, download
 from niyam.evals import answers as answers_eval
+from niyam.evals import edge as edge_eval
 from niyam.evals import end_to_end
 from niyam.evals import extraction as extraction_eval
 from niyam.evals import retrieval as retrieval_eval
@@ -31,6 +32,10 @@ RETRIEVAL_DEV_SET = Path("evals/retrieval-dev.jsonl")
 RETRIEVAL_TEST_SET = Path("evals/retrieval-test.jsonl")
 PIPELINE_SET = Path("evals/pipeline.jsonl")
 EXTRACTION_SET = Path("evals/extraction.jsonl")
+EDGE_SETS = (
+    Path("evals/independent/edge_cases.jsonl"),
+    Path("evals/independent/decline_and_security.jsonl"),
+)
 
 
 def _verify_providers() -> int:
@@ -96,28 +101,7 @@ def _ask(message: str, as_of: date) -> int:
             settings.generation_thinking_level,
         )
         reply = pipeline.answer(message, as_of, services)
-    print(f"Question: {reply.extraction.question}")
-    print()
-    for finding in reply.assessment.findings:
-        print(f"- [{finding.status}] {finding.summary} ({finding.citation})")
-        for assumption in finding.assumptions:
-            print(f"    assumption: {assumption}")
-    if reply.assessment.missing:
-        print()
-        print(f"Tell me these to compute more deadlines: {', '.join(reply.assessment.missing)}")
-    print()
-    if reply.rejected_reason is None:
-        print(reply.explanation.explanation)
-        print(f"Sources: {', '.join(reply.explanation.citations)}")
-    else:
-        print(f"Explanation withheld: it {reply.rejected_reason}.")
-    if reply.rerank_error is not None:
-        print(f"Note: reranking failed ({reply.rerank_error}); sources are in search order.")
-    if reply.extraction.out_of_scope:
-        print()
-        print(f"Not covered: {', '.join(reply.extraction.out_of_scope)}. {pipeline.NOT_COVERED}")
-    print()
-    print(pipeline.DISCLAIMER)
+    print(pipeline.render(reply))
     return 0
 
 
@@ -240,6 +224,38 @@ def _eval_pipeline(output: Path) -> int:
     return 0
 
 
+def _eval_edge(output: Path, sets: list[Path]) -> int:
+    settings = get_settings()
+    cases = edge_eval.load_cases(sets)
+    with closing(build_models(settings)) as models, _connect() as conn:
+        services = pipeline.Services(
+            models.generator,
+            models.decision,
+            models.embedder,
+            conn,
+            settings.generation_thinking_level,
+        )
+        scores = [
+            edge_eval.evaluate(c, _strict_answer(c.message, c.as_of, services), models.judge)
+            for c in cases
+        ]
+    totals = edge_eval.summary(scores)
+    _save(
+        output,
+        sets[0],
+        eval_sets=[s.as_posix() for s in sets],
+        generation_model=settings.generation_model,
+        decision_model=settings.decision_model,
+        judge_model=settings.judge_model,
+        summary=totals,
+        scores=[asdict(s) | {"passed": s.passed} for s in scores],
+    )
+    overall = totals["all"]
+    print("  ".join(f"{name}={value}" for name, value in overall.items()))
+    print(f"{len(cases)} cases; per-category results in {output}")
+    return 0
+
+
 def _reranked(
     conn: psycopg.Connection, decider: DecisionModel, question: str, candidates: list[str]
 ) -> list[str]:
@@ -305,6 +321,9 @@ def main() -> None:
     whole.add_argument("output", type=Path, help="where to save the raw JSON report")
     evaluate_x = commands.add_parser("eval-extraction", help="score fact extraction end to end")
     evaluate_x.add_argument("output", type=Path, help="where to save the raw JSON report")
+    edge = commands.add_parser("eval-edge", help="score full replies on the independent sets")
+    edge.add_argument("output", type=Path, help="where to save the raw JSON report")
+    edge.add_argument("--set", type=Path, action="append", dest="sets", help="repeatable")
     ask = commands.add_parser("ask", help="answer an F-1 student's question")
     ask.add_argument("message")
     ask.add_argument("--as-of", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD")
@@ -328,5 +347,7 @@ def main() -> None:
         sys.exit(_eval_pipeline(args.output))
     if args.command == "eval-extraction":
         sys.exit(_eval_extraction(args.output))
+    if args.command == "eval-edge":
+        sys.exit(_eval_edge(args.output, args.sets or list(EDGE_SETS)))
     if args.command == "ask":
         sys.exit(_ask(args.message, args.as_of))
