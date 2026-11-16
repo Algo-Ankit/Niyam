@@ -19,8 +19,9 @@ from niyam.evals import end_to_end
 from niyam.evals import extraction as extraction_eval
 from niyam.evals import retrieval as retrieval_eval
 from niyam.models.factory import build_models
+from niyam.models.interfaces import DecisionModel
 from niyam.retrieval import hyde as hyde_search
-from niyam.retrieval import store
+from niyam.retrieval import rerank, store
 from niyam.verify import run_checks
 
 RAW_TITLE_8 = Path("data/raw/ECFR-title8.xml")
@@ -88,7 +89,11 @@ def _ask(message: str, as_of: date) -> int:
     settings = get_settings()
     with closing(build_models(settings)) as models, _connect() as conn:
         services = pipeline.Services(
-            models.generator, models.embedder, conn, settings.generation_thinking_level
+            models.generator,
+            models.decision,
+            models.embedder,
+            conn,
+            settings.generation_thinking_level,
         )
         reply = pipeline.answer(message, as_of, services)
     print(f"Question: {reply.extraction.question}")
@@ -106,6 +111,8 @@ def _ask(message: str, as_of: date) -> int:
         print(f"Sources: {', '.join(reply.explanation.citations)}")
     else:
         print(f"Explanation withheld: it {reply.rejected_reason}.")
+    if reply.rerank_error is not None:
+        print(f"Note: reranking failed ({reply.rerank_error}); sources are in search order.")
     if reply.extraction.out_of_scope:
         print()
         print(f"Not covered: {', '.join(reply.extraction.out_of_scope)}. {pipeline.NOT_COVERED}")
@@ -114,7 +121,7 @@ def _ask(message: str, as_of: date) -> int:
     return 0
 
 
-def _eval_retrieval(output: Path, eval_set: Path, hyde: bool) -> int:
+def _eval_retrieval(output: Path, eval_set: Path, *, hyde: bool, rerank: bool) -> int:
     settings = get_settings()
     items = retrieval_eval.load_items(eval_set)
     level = settings.generation_thinking_level
@@ -124,7 +131,8 @@ def _eval_retrieval(output: Path, eval_set: Path, hyde: bool) -> int:
             if hyde
             else None
         )
-        ranked = retrieval_eval.run(conn, models.embedder, items, passage_for)
+        reorder = (lambda q, cs: _reranked(conn, models.decision, q, cs)) if rerank else None
+        ranked = retrieval_eval.run(conn, models.embedder, items, passage_for, reorder)
     scores = retrieval_eval.metrics(ranked)
     versus_vector = {
         arm: {name: asdict(interval) for name, interval in by_metric.items()}
@@ -135,6 +143,7 @@ def _eval_retrieval(output: Path, eval_set: Path, hyde: bool) -> int:
         eval_set,
         embedding_model=settings.embedding_model,
         generation_model=settings.generation_model if hyde else None,
+        decision_model=settings.decision_model if rerank else None,
         metrics=scores,
         versus_vector=versus_vector,
         rankings=[asdict(r) for r in ranked],
@@ -206,10 +215,14 @@ def _eval_pipeline(output: Path) -> int:
     scenarios = end_to_end.load_scenarios(PIPELINE_SET)
     with closing(build_models(settings)) as models, _connect() as conn:
         services = pipeline.Services(
-            models.generator, models.embedder, conn, settings.generation_thinking_level
+            models.generator,
+            models.decision,
+            models.embedder,
+            conn,
+            settings.generation_thinking_level,
         )
         scores = [
-            end_to_end.evaluate(s, pipeline.answer(s.message, s.as_of, services), models.judge)
+            end_to_end.evaluate(s, _strict_answer(s.message, s.as_of, services), models.judge)
             for s in scenarios
         ]
     totals = end_to_end.summary(scores)
@@ -225,6 +238,23 @@ def _eval_pipeline(output: Path) -> int:
     print("  ".join(f"{name}={value}" for name, value in totals.items()))
     print(f"{len(scenarios)} scenarios; raw output in {output}")
     return 0
+
+
+def _reranked(
+    conn: psycopg.Connection, decider: DecisionModel, question: str, candidates: list[str]
+) -> list[str]:
+    """`candidates` with the top `rerank.CANDIDATES` reordered by the decision model."""
+    head = store.by_citation(conn, candidates[: rerank.CANDIDATES])
+    reordered = [hit.citation for hit in rerank.rerank(decider, question, head)]
+    return reordered + candidates[rerank.CANDIDATES :]
+
+
+def _strict_answer(message: str, as_of: date, services: pipeline.Services) -> pipeline.Reply:
+    """An answer for an eval: a reranker failure stops the run instead of skewing its scores."""
+    reply = pipeline.answer(message, as_of, services)
+    if reply.rerank_error is not None:
+        raise SystemExit(f"reranking failed, eval stopped: {reply.rerank_error}")
+    return reply
 
 
 def _save(output: Path, eval_set: Path, **fields: object) -> None:
@@ -266,6 +296,9 @@ def main() -> None:
     evaluate.add_argument("output", type=Path, help="where to save the raw JSON report")
     evaluate.add_argument("--set", type=Path, default=RETRIEVAL_DEV_SET, dest="eval_set")
     evaluate.add_argument("--hyde", action="store_true", help="add the HyDE arms (1 call each)")
+    evaluate.add_argument(
+        "--rerank", action="store_true", help="add the reranked vector arm (1 call each)"
+    )
     answers = commands.add_parser("eval-answers", help="score answers given the gold provisions")
     answers.add_argument("output", type=Path, help="where to save the raw JSON report")
     whole = commands.add_parser("eval-pipeline", help="score the whole assistant on scenarios")
@@ -288,7 +321,7 @@ def main() -> None:
     if args.command == "search":
         sys.exit(_search(args.query))
     if args.command == "eval-retrieval":
-        sys.exit(_eval_retrieval(args.output, args.eval_set, args.hyde))
+        sys.exit(_eval_retrieval(args.output, args.eval_set, hyde=args.hyde, rerank=args.rerank))
     if args.command == "eval-answers":
         sys.exit(_eval_answers(args.output))
     if args.command == "eval-pipeline":

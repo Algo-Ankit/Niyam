@@ -1,8 +1,9 @@
 """One request end to end. Models only extract and explain; every date comes from the rules engine.
 
 Steps: (1) the generator extracts StudentFacts and the question; (2) the rules engine computes
-findings; (3) hybrid search plus the findings' own paragraphs give the provisions; (4) the
-generator explains using only those; (5) code rejects any citation or date the model invented.
+findings; (3) vector search finds candidates, the decision model reranks them, and the top ones
+plus the findings' own paragraphs give the provisions; (4) the generator explains using only
+those; (5) code rejects any citation or date the model invented.
 """
 
 import json
@@ -15,8 +16,10 @@ import psycopg
 from pydantic import BaseModel, Field
 
 from niyam.config import ThinkingLevel
-from niyam.models.interfaces import Embedder, GenerativeModel
+from niyam.models.errors import ModelError
+from niyam.models.interfaces import DecisionModel, Embedder, GenerativeModel
 from niyam.models.types import GenerationRequest
+from niyam.retrieval import rerank
 from niyam.retrieval.store import Hit, by_citation, search
 from niyam.rules.opt import Assessment, StudentFacts, assess
 
@@ -62,11 +65,13 @@ class Reply:
     provisions: tuple[Hit, ...]
     explanation: Explanation  # the generator's draft; shown only if rejected_reason is None
     rejected_reason: str | None
+    rerank_error: str | None  # set when reranking failed and vector order was used instead
 
 
 @dataclass(frozen=True)
 class Services:
     generator: GenerativeModel
+    decider: DecisionModel
     embedder: Embedder
     conn: psycopg.Connection
     thinking_level: ThinkingLevel | None
@@ -76,11 +81,28 @@ def answer(message: str, as_of: date, services: Services) -> Reply:
     generator, level = services.generator, services.thinking_level
     extraction = extract(message, as_of, generator, level)
     assessment = assess(extraction.facts, as_of)
-    provisions = _provisions(services.conn, services.embedder, extraction.question, assessment)
+    candidates = search(services.conn, services.embedder, extraction.question, rerank.CANDIDATES)
+    top, rerank_error = top_provisions(services.decider, extraction.question, candidates)
+    provisions = _with_cited(services.conn, top, assessment)
     explanation = explain(extraction.question, assessment, provisions, generator, level)
     given = fact_dates(extraction.facts) | {as_of.isoformat()}
     reason = check_explanation(explanation, assessment, provisions, given)
-    return Reply(extraction, assessment, provisions, explanation, reason)
+    return Reply(extraction, assessment, provisions, explanation, reason, rerank_error)
+
+
+def top_provisions(
+    decider: DecisionModel, question: str, candidates: list[Hit]
+) -> tuple[list[Hit], str | None]:
+    """The best `RETRIEVAL_K` candidates after reranking, and the error if reranking failed.
+
+    A reranker failure degrades to vector order instead of failing the reply (D50); the error is
+    returned so the reply can say so.
+    """
+    try:
+        ordered = rerank.rerank(decider, question, candidates)
+    except ModelError as error:
+        return candidates[:RETRIEVAL_K], str(error)
+    return ordered[:RETRIEVAL_K], None
 
 
 def explain(
@@ -136,10 +158,10 @@ def check_explanation(
     return None
 
 
-def _provisions(
-    conn: psycopg.Connection, embedder: Embedder, question: str, assessment: Assessment
+def _with_cited(
+    conn: psycopg.Connection, hits: list[Hit], assessment: Assessment
 ) -> tuple[Hit, ...]:
-    hits = search(conn, embedder, question, k=RETRIEVAL_K)
+    """The findings' paragraphs that retrieval missed, then the retrieved `hits`."""
     cited = [f.citation for f in assessment.findings]
     seen = {h.citation for h in hits}
     extra = by_citation(conn, [c for c in dict.fromkeys(cited) if c not in seen])

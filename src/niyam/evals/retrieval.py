@@ -60,13 +60,20 @@ def run(
     embedder: Embedder,
     items: list[Item],
     passage_for: Callable[[str], str] | None = None,
+    reorder: Callable[[str, list[str]], list[str]] | None = None,
 ) -> list[Ranked]:
-    """Rank every question with every arm; HyDE arms run only when `passage_for` is given."""
+    """Rank every question with every arm.
+
+    HyDE arms run only when `passage_for` is given; the reranked arm only when `reorder` (the
+    question and the vector ranking in, a reordered ranking out) is given.
+    """
     ranked = []
     for item in items:
         keyword = keyword_ranking(conn, item.question, _CANDIDATES)
         vector = vector_ranking(conn, embed_query(embedder, item.question), _CANDIDATES)
         rankings = {"keyword": keyword, "vector": vector, "hybrid": _fused(keyword, vector)}
+        if reorder is not None:
+            rankings["vector+rerank"] = reorder(item.question, vector)
         passage = None
         if passage_for is not None:
             passage = passage_for(item.question)

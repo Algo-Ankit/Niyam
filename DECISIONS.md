@@ -337,3 +337,10 @@ confirmed once on a test split.
 *Why:* the standard retrieve-then-rerank pattern, aimed at the measured failure. *Tradeoff:*
 one extra decision request per question (10,000 per day free), more latency, and the gain is
 capped at the 11 misses, so it may not reach significance on the current sets.
+
+**D50. A reranker failure degrades `ask` to vector order; evals stop instead.** Decided by the
+builder on 2026-11-16 under the owner's go-ahead for D49. If the decision call fails (provider
+error, quota or budget), `niyam ask` keeps the vector top 5 and the reply says reranking
+failed; `eval-pipeline` exits with the error so no score mixes reranked and unreranked replies.
+*Why:* a student still gets the computed deadlines, which never depend on retrieval order.
+*Tradeoff:* a degraded reply may cite less relevant provisions; the note makes that visible.

@@ -85,7 +85,7 @@ def _reply(facts: StudentFacts, as_of: date, rejected: str | None) -> Reply:
     )
     provisions = (Hit("8 CFR 214.2(f)(11)(i)(B)(2)", (), "text", 0.0),)
     extraction = Extraction(facts=facts, question="q")
-    return Reply(extraction, assess(facts, as_of), provisions, explanation, rejected)
+    return Reply(extraction, assess(facts, as_of), provisions, explanation, rejected, None)
 
 
 def test_end_to_end_score_counts_a_withheld_explanation_as_not_correct() -> None:
