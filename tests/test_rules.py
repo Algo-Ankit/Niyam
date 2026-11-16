@@ -145,10 +145,20 @@ def test_every_cited_paragraph_exists_in_the_corpus() -> None:
     before_stem = facts.model_copy(update={"on_stem_extension": False})
     cited = {
         f.citation
-        for scenario in (facts, before_stem)
+        for scenario in (
+            facts,
+            before_stem,
+            _cap_gap_student(h1b_change_of_status=True, h1b_fiscal_year=2027),
+            _cap_gap_student(
+                h1b_change_of_status=True,
+                h1b_fiscal_year=2027,
+                h1b_petition_outcome="denied",
+                h1b_outcome_date=date(2026, 8, 1),
+            ),
+        )
         for f in assess(scenario, date(2027, 10, 1)).findings
     }
-    assert len(cited) == 11, sorted(cited)  # every rule's paragraph is exercised
+    assert len(cited) == 13, sorted(cited)  # every rule's paragraph is exercised
     assert cited <= citations, cited - citations
 
 
@@ -211,3 +221,71 @@ def test_confirmed_jobs_need_no_questions() -> None:
         "opt_end_date",
         "stem_degree",
     )
+
+
+def _cap_gap_student(**h1b: object) -> StudentFacts:
+    student = StudentFacts(
+        opt_start_date=date(2025, 7, 1),
+        opt_end_date=date(2026, 6, 30),
+        jobs=[Job(start=date(2025, 7, 1), end=None, related_to_major=True)],
+        h1b_petition_filed=True,
+    )
+    return StudentFacts.model_validate(student.model_dump() | h1b)
+
+
+def test_pending_cap_gap_extends_status_to_april_1_and_replaces_the_departure_period() -> None:
+    facts = _cap_gap_student(h1b_change_of_status=True, h1b_fiscal_year=2027)
+    rules = _by_rule(facts, date(2026, 7, 15))
+    gap = rules["cap_gap_extension"]
+    assert (gap.citation, gap.closes, gap.status) == (
+        "8 CFR 214.2(f)(5)(vii)(A)",
+        date(2027, 4, 1),
+        "upcoming",
+    )
+    assert "The petition is taken to be pending." in gap.assumptions
+    assert "departure_period" not in rules
+
+
+def test_approved_petition_ends_cap_gap_at_its_start_date_if_earlier() -> None:
+    facts = _cap_gap_student(
+        h1b_change_of_status=True,
+        h1b_fiscal_year=2027,
+        h1b_petition_outcome="approved",
+        h1b_validity_start=date(2026, 10, 1),
+    )
+    assert _by_rule(facts, date(2026, 7, 15))["cap_gap_extension"].closes == date(2026, 10, 1)
+
+
+def test_consular_processing_gets_no_cap_gap_and_keeps_the_departure_period() -> None:
+    facts = _cap_gap_student(h1b_change_of_status=False, h1b_fiscal_year=2027)
+    rules = _by_rule(facts, date(2026, 7, 15))
+    assert rules["cap_gap_extension"].status == "not_applicable"
+    assert rules["departure_period"].closes == date(2026, 7, 30)
+
+
+def test_denied_petition_ends_cap_gap_with_the_cautious_departure_date() -> None:
+    facts = _cap_gap_student(
+        h1b_change_of_status=True,
+        h1b_fiscal_year=2027,
+        h1b_petition_outcome="denied",
+        h1b_outcome_date=date(2026, 8, 1),
+    )
+    rules = _by_rule(facts, date(2026, 8, 5))
+    assert (rules["cap_gap_extension"].status, rules["cap_gap_extension"].citation) == (
+        "ended",
+        "8 CFR 214.2(f)(5)(vii)(B)",
+    )
+    departure = rules["cap_gap_departure"]
+    assert departure.closes == date(2026, 8, 31)  # later of 2026-08-01 and 2026-06-30, + 30
+    assert "SEVP's 2025 guidance says 60 days" in departure.assumptions[0]
+
+
+def test_cap_gap_questions_are_asked_only_after_a_petition_is_mentioned() -> None:
+    asked = assess(_cap_gap_student(), date(2026, 7, 15)).missing
+    assert ("h1b_change_of_status" in asked, "h1b_fiscal_year" in asked) == (True, True)
+    plain = StudentFacts(opt_start_date=date(2025, 7, 1))
+    assert not [m for m in assess(plain, date(2026, 7, 15)).missing if m.startswith("h1b")]
+    denied = _cap_gap_student(
+        h1b_change_of_status=True, h1b_fiscal_year=2027, h1b_petition_outcome="withdrawn"
+    )
+    assert "h1b_outcome_date" in assess(denied, date(2026, 8, 5)).missing

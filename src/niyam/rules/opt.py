@@ -1,4 +1,4 @@
-"""OPT and STEM OPT deadlines and unemployment limits, from 8 CFR 214.2(f) (current 2026-10-14).
+"""OPT, STEM OPT and H-1B cap-gap rules, from 8 CFR 214.2(f) (current 2026-10-14).
 
 Every number here is quoted from the regulation text in data/processed; each Finding cites the
 paragraph it comes from. Calendar days unless the regulation says business days.
@@ -14,8 +14,18 @@ from pydantic import BaseModel, Field
 from niyam.rules.dates import add_business_days, add_months
 
 Status = Literal[
-    "not_yet_open", "open", "closed", "upcoming", "passed", "within_limit", "over_limit"
+    "not_yet_open",
+    "open",
+    "closed",
+    "upcoming",
+    "passed",
+    "within_limit",
+    "over_limit",
+    "not_applicable",
+    "ended",
 ]
+PetitionOutcome = Literal["pending", "approved", "rejected", "denied", "revoked", "withdrawn"]
+_TERMINATING: frozenset[PetitionOutcome] = frozenset({"rejected", "denied", "revoked", "withdrawn"})
 
 _CFR = "8 CFR 214.2(f)"
 _STEM_MIN_HOURS = 20  # (f)(10)(ii)(C)(8): "not ... less than 20 hours per week"
@@ -64,6 +74,30 @@ class StudentFacts(BaseModel):
         default=None, description="Whether a 24-month STEM OPT extension has been approved"
     )
     jobs: list[Job] = Field(default_factory=list, description="Jobs held during OPT")
+    h1b_petition_filed: bool | None = Field(
+        default=None,
+        description="True if the student says an employer filed a cap-subject H-1B petition for "
+        "them; null if not mentioned",
+    )
+    h1b_change_of_status: bool | None = Field(
+        default=None,
+        description="True if that petition requests a change of status, False if it is for "
+        "consular processing; null if not said",
+    )
+    h1b_fiscal_year: int | None = Field(
+        default=None,
+        description="Fiscal year of the requested H-1B status (FY 2027 starts 2026-10-01)",
+    )
+    h1b_petition_outcome: PetitionOutcome | None = Field(
+        default=None, description="Current state of the H-1B petition, if the student said"
+    )
+    h1b_validity_start: date | None = Field(
+        default=None, description="Validity start date of the approved H-1B petition"
+    )
+    h1b_outcome_date: date | None = Field(
+        default=None,
+        description="Date the H-1B petition was rejected, denied, revoked or withdrawn",
+    )
 
 
 @dataclass(frozen=True)
@@ -94,6 +128,7 @@ def assess(facts: StudentFacts, as_of: date) -> Assessment:
         else:
             findings.extend(rule(facts, as_of))
     missing.extend(_unconfirmed_job_facts(facts))
+    missing.extend(_unconfirmed_cap_gap_facts(facts))
     return Assessment(tuple(findings), tuple(missing))
 
 
@@ -258,6 +293,8 @@ def _stem_obligations(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
 
 
 def _departure_period(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
+    if _cap_gap_applies(facts):
+        return  # status is extended past the OPT end date; see _cap_gap
     authorized_end = _stem_end(facts) if facts.on_stem_extension else _known(facts.opt_end_date)
     last = authorized_end + timedelta(days=30)
     yield Finding(
@@ -271,6 +308,87 @@ def _departure_period(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
     )
 
 
+def _cap_gap(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
+    """The H-1B cap-gap extension of F-1 status and OPT, 8 CFR 214.2(f)(5)(vii)."""
+    if not facts.h1b_petition_filed:
+        return
+    if facts.h1b_change_of_status is False:
+        yield Finding(
+            "cap_gap_extension",
+            f"{_CFR}(5)(vii)(A)",
+            "No cap-gap extension: it applies only to a petition requesting a change of status, "
+            "not consular processing",
+            "not_applicable",
+        )
+        return
+    if facts.h1b_fiscal_year is None:
+        return
+    if facts.h1b_petition_outcome in _TERMINATING:
+        yield Finding(
+            "cap_gap_extension",
+            f"{_CFR}(5)(vii)(B)",
+            f"The cap-gap extension ended when the petition was {facts.h1b_petition_outcome}",
+            "ended",
+        )
+        yield from _cap_gap_departure(facts, as_of)
+        return
+    april_first = date(facts.h1b_fiscal_year, 4, 1)
+    end = april_first
+    if facts.h1b_petition_outcome == "approved" and facts.h1b_validity_start is not None:
+        end = min(april_first, facts.h1b_validity_start)
+    assumptions = [
+        "The petition is cap-subject, timely filed and nonfrivolous ((f)(5)(vii)(A)).",
+        "You have not violated your F-1 status ((f)(5)(vii)(C)).",
+        "Work authorisation extends only if your OPT or STEM OPT was valid; otherwise only "
+        "status is extended.",
+    ]
+    if facts.h1b_petition_outcome is None:
+        assumptions.append("The petition is taken to be pending.")
+    yield Finding(
+        "cap_gap_extension",
+        f"{_CFR}(5)(vii)(A)",
+        f"F-1 status and OPT work authorisation are extended until {end} (April 1 of fiscal "
+        f"year {facts.h1b_fiscal_year}, or the approved petition's start date if earlier)",
+        _deadline(end, as_of),
+        closes=end,
+        assumptions=tuple(assumptions),
+    )
+
+
+# NOTE: (f)(5)(vii) does not say how long a student has to depart after a terminated cap-gap
+# extension. SEVP's page (2025-04-10) says 60 days from the later of termination and the OPT end,
+# but predates the 2026 rule that cut (f)(5)(v) to 30 days; we give the cautious 30-day date.
+def _cap_gap_departure(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
+    if facts.h1b_outcome_date is None:
+        return
+    ends = [facts.h1b_outcome_date]
+    if facts.opt_end_date is not None:
+        ends.append(_stem_end(facts) if facts.on_stem_extension else facts.opt_end_date)
+    last = max(ends) + timedelta(days=30)
+    yield Finding(
+        "cap_gap_departure",
+        f"{_CFR}(5)(v)",
+        f"Plan to depart or change status by {last} (30 days after the later of the petition "
+        "decision and your OPT end date)",
+        _deadline(last, as_of),
+        closes=last,
+        assumptions=(
+            "The regulation does not state the departure period after a cap-gap extension "
+            "ends. This is the cautious reading of the 30-day period in (f)(5)(v); SEVP's "
+            "2025 guidance says 60 days but predates the 2026 rule. Confirm with your DSO.",
+        ),
+    )
+
+
+def _cap_gap_applies(facts: StudentFacts) -> bool:
+    return bool(
+        facts.h1b_petition_filed
+        and facts.h1b_change_of_status is not False
+        and facts.h1b_fiscal_year is not None
+        and facts.h1b_petition_outcome not in _TERMINATING
+    )
+
+
 _Rule = Callable[[StudentFacts, date], Iterable[Finding]]
 _RULES: tuple[tuple[tuple[str, ...], _Rule], ...] = (
     (("program_end_date",), _opt_filing_window),
@@ -280,6 +398,7 @@ _RULES: tuple[tuple[tuple[str, ...], _Rule], ...] = (
     (("opt_end_date", "stem_degree"), _stem_filing_window),
     (("opt_end_date",), _stem_obligations),
     (("opt_end_date",), _departure_period),
+    ((), _cap_gap),
 )
 
 
@@ -318,6 +437,20 @@ def _unconfirmed_job_facts(facts: StudentFacts) -> Iterable[str]:
     stem_start = _known(facts.opt_end_date) + timedelta(days=1) if facts.on_stem_extension else None
     if any(_in_stem_period(j, stem_start) and j.hours_per_week is None for j in facts.jobs):
         yield "hours per week of each job during STEM OPT"
+
+
+def _unconfirmed_cap_gap_facts(facts: StudentFacts) -> Iterable[str]:
+    """Cap-gap facts to ask for, only once the student says an H-1B petition was filed."""
+    if not facts.h1b_petition_filed:
+        return
+    if facts.h1b_change_of_status is None:
+        yield "h1b_change_of_status"
+    if facts.h1b_fiscal_year is None:
+        yield "h1b_fiscal_year"
+    if facts.h1b_petition_outcome in _TERMINATING and facts.h1b_outcome_date is None:
+        yield "h1b_outcome_date"
+    if facts.h1b_petition_outcome == "approved" and facts.h1b_validity_start is None:
+        yield "h1b_validity_start"
 
 
 def _in_stem_period(job: Job, stem_start: date | None) -> bool:

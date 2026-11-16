@@ -366,3 +366,15 @@ against official sources found no support for "every job counts".
 *Why:* the old convention under-counted unemployment for students in unrelated jobs, which is
 the costly direction. *Tradeoff:* more follow-up questions; "related to the major" is the
 student's own judgement, not something code can verify.
+
+**D53. After a cap-gap extension ends, give the cautious 30-day departure date and flag it.**
+Decided by the builder on 2026-11-16 at the owner's request to resolve the conflict. 8 CFR
+214.2(f)(5)(vii) does not state a departure period after termination. SEVP's cap-gap page
+(last updated 2025-04-10) says 60 days from the later of termination and the program or OPT end
+date; the 2026-07-17 final rule (FR Doc 2026-14439, effective 2026-09-15) cut (f)(5)(v) to 30
+days and, in the excerpts found, does not address cap-gap. Niyam gives 30 days after the later
+of the petition decision and the OPT end, cites (f)(5)(v), and states the conflict. A consular-
+processing petition gets no extension; a pending or approved change-of-status petition replaces
+the ordinary departure finding with the extension end date.
+*Why:* leaving early costs less than overstaying. *Tradeoff:* students may plan for 30 days
+when DHS would allow 60; the reply says so and points to the DSO.

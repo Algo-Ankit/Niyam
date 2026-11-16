@@ -24,7 +24,7 @@ from niyam.retrieval.store import Hit, by_citation, search
 from niyam.rules.opt import Assessment, StudentFacts, assess
 
 OutOfScope = Literal[
-    "H-1B or other work visas",
+    "H-1B lottery, petition or other work visas",
     "green card or permanent residence",
     "taxes",
     "travel, visa stamping or re-entry",
@@ -32,7 +32,8 @@ OutOfScope = Literal[
     "other",
 ]
 NOT_COVERED = (
-    "H-1B, green card, taxes, travel and visa stamping, and statuses other than F-1 are not "
+    "H-1B beyond the cap-gap extension, green card, taxes, travel and visa stamping, and "
+    "statuses other than F-1 are not "
     "covered. Your DSO (school international student adviser) or an immigration attorney can help."
 )
 DISCLAIMER = "Information from 8 CFR 214.2(f), not legal advice. Confirm deadlines with your DSO."
