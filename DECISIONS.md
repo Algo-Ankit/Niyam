@@ -325,3 +325,15 @@ retrieves k = 5. Gold is builder-written and paragraph-anchored; judge scores st
 until the owner labels 30 verdicts.
 *Why:* enough items to separate the arms without overkill. *Tradeoff:* about 180 generator
 requests per full run of 500 per day; partly self-graded until owner review.
+
+**D49. Rerank the vector top 10 with the decision model.** Owner-approved on 2026-11-16.
+Retrieval becomes two stages: vector search returns 10 candidates, then gemini-decision-1
+answers one yes/no question per candidate ("does this provision help answer the question?")
+in a single request, and candidates are ordered by P(yes), ties kept in vector order. The
+assistant keeps the top 5. Basis: in the raw R7 and R8 rankings the gold paragraph is in the
+vector top 10 for all 95 questions, so the 11 rank-1 misses are ordering errors. The reranker
+is measured against vector alone on the dev split with the paired bootstrap (D48), then
+confirmed once on a test split.
+*Why:* the standard retrieve-then-rerank pattern, aimed at the measured failure. *Tradeoff:*
+one extra decision request per question (10,000 per day free), more latency, and the gain is
+capped at the 11 misses, so it may not reach significance on the current sets.
