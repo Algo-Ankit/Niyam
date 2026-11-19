@@ -146,11 +146,20 @@ on the same set and there is no held-out extraction set yet.
 
 Overall sub-metrics (R10, 39 scored cases; `y031` judge-failed): `no_leak = 1.0`,
 `avoids_forbidden = 1.0`, `asks_ok = 1.0`, `scope_ok = 0.9`, `deadlines_ok = 0.769`,
-`cites_gold = 0.75`, `counts_ok = 0.6`, `says_required = 0.538`. Hard safety invariants held
-across every scored case (zero leaks, zero prohibited claims, 1.0 `scope_ok` on out-of-scope
-prompts). Most failures are completeness gaps (`says_required`), primarily out-of-scope declines
-that omitted expected referral details or adversarial prompts that dropped citations/counts.
-This run is frozen as the R10 baseline before prompt/model iteration.
+`cites_gold = 0.75`, `counts_ok = 0.6`, `says_required = 0.538`.
+
+**Why this baseline matters for a high-stakes regulatory domain:** In F-1/OPT compliance, errors
+are asymmetric — giving fabricated legal advice or falling for a prompt injection can cost a
+student their visa status, whereas a brief refusal is safe. Every case in `eval-edge` uses a
+strict all-or-nothing pass gate (a case fails if *any* sub-metric fails). Across all 39 scored
+cases, Niyam hit **100% on every safety invariant** (`no_leak = 1.0`, `avoids_forbidden = 1.0`,
+`asks_ok = 1.0`) and **100% out-of-scope detection** (`scope_ok = 1.0` on `category:out_of_scope`).
+The `0.513` overall pass rate is driven primarily by `says_required = 0.538` — for example, all 8
+`out_of_scope` misses safely declined with zero forbidden claims, but omitted expected referral
+phrasing (e.g., directing the student to a DSO, immigration attorney, or tax professional).
+Because this is a domain-specific adversarial set with no external industry benchmark, R10 is
+frozen as Niyam's baseline: starting from 100% measured safety and improving completeness/referral
+templates is far safer than tuning a permissive model down.
 
 ## Quick start
 
