@@ -27,22 +27,52 @@ OutOfScope = Literal[
     "H-1B lottery, petition or other work visas",
     "green card or permanent residence",
     "taxes",
-    "travel, visa stamping or re-entry",
+    "visa stamping or consular renewal",
     "J-1, M-1 or other non-F-1 status",
     "other",
 ]
 NOT_COVERED = (
-    "H-1B beyond the cap-gap extension, green card, taxes, travel and visa stamping, and "
-    "statuses other than F-1 are not "
+    "H-1B beyond the cap-gap extension, green card, taxes, visa stamping and consular renewal, "
+    "and statuses other than F-1 are not "
     "covered. Your DSO (school international student adviser) or an immigration attorney can help."
 )
 DISCLAIMER = "Information from 8 CFR 214.2(f), not legal advice. Confirm deadlines with your DSO."
 RETRIEVAL_K = 5
 _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_DAY = r"(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?"
+_MONTH_CAP = (
+    r"(?:January|February|March|April|May|June|July|August|September|October|November|December"
+    r"|Jan\.?|Feb\.?|Mar\.?|Apr\.?|Jun\.?|Jul\.?|Aug\.?|Sept?\.?|Oct\.?|Nov\.?|Dec\.?)"
+)
+_MONTH_ANY = (
+    r"(?:[Jj]anuary|[Ff]ebruary|[Mm]arch|[Aa]pril|May|[Jj]une|[Jj]uly|[Aa]ugust"
+    r"|[Ss]eptember|[Oo]ctober|[Nn]ovember|[Dd]ecember"
+    r"|[Jj]an\.?|[Ff]eb\.?|[Mm]ar\.?|[Aa]pr\.?|[Jj]un\.?|[Jj]ul\.?|[Aa]ug\.?"
+    r"|[Ss]ept?\.?|[Oo]ct\.?|[Nn]ov\.?|[Dd]ec\.?)"
+)
 _WORD_DATE = re.compile(
-    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.? \d{1,2}\b"
+    rf"\b{_MONTH_ANY} {_DAY}(?:,?\s+\d{{4}})?\b"
+    rf"|\b{_DAY} {_MONTH_CAP}(?:,?\s+\d{{4}})?\b"
     r"|\b\d{1,2}/\d{1,2}/\d{2,4}\b"
 )
+_FULL_MONTH_DATE = re.compile(
+    r"\b(January|February|March|April|May|June|July|August|September|October|November|December)"
+    r" (\d{1,2}), (\d{4})\b"
+)
+_MONTHS: dict[str, int] = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
 
 
 class Extraction(BaseModel):
@@ -121,7 +151,7 @@ def explain(
 def fact_dates(facts: StudentFacts) -> frozenset[str]:
     """Every date the student gave, in ISO form; an explanation may repeat these."""
     dates = [getattr(facts, name) for name in StudentFacts.model_fields if name != "jobs"]
-    dates += [d for job in facts.jobs for d in (job.start, job.end)]
+    dates += [d for job in (facts.jobs or ()) for d in (job.start, job.end)]
     return frozenset(d.isoformat() for d in dates if isinstance(d, date))
 
 
@@ -164,23 +194,43 @@ def check_explanation(
 ) -> str | None:
     """Why the explanation must not be shown, or None if every citation and date is grounded.
 
-    Allowed dates: those the rules engine computed and those the student gave (`given_dates`).
+    Allowed dates: those the rules engine computed, those the student gave (`given_dates`), and
+    literal dates written in the given `provisions` (e.g. "April 1" or "September 15, 2026").
     """
     allowed = {p.citation for p in provisions}
     invented = [c for c in explanation.citations if c not in allowed]
     if invented:
         return f"cited provisions it was not given: {invented}"
+    provision_words, provision_isos = _provision_dates(provisions)
     known_dates = {
         d.isoformat() for f in assessment.findings for d in (f.opens, f.closes) if d is not None
     }
     known_dates |= set(_ISO_DATE.findall(" ".join(f.summary for f in assessment.findings)))
-    known_dates |= given_dates
-    if word_dates := _WORD_DATE.findall(explanation.explanation):
-        return f"stated dates in a form that cannot be checked: {word_dates}"
+    known_dates |= given_dates | provision_isos
+    bad_words = [
+        d for d in _WORD_DATE.findall(explanation.explanation) if d.lower() not in provision_words
+    ]
+    if bad_words:
+        return f"stated dates in a form that cannot be checked: {bad_words}"
     unknown = sorted(set(_ISO_DATE.findall(explanation.explanation)) - known_dates)
     if unknown:
         return f"stated dates the rules engine did not compute: {unknown}"
     return None
+
+
+def _provision_dates(provisions: tuple[Hit, ...]) -> tuple[set[str], set[str]]:
+    """Lowercase word dates and ISO dates appearing literally in the given regulation provisions."""
+    words: set[str] = set()
+    isos: set[str] = set()
+    for provision in provisions:
+        words.update(m.lower() for m in _WORD_DATE.findall(provision.body))
+        isos.update(_ISO_DATE.findall(provision.body))
+        for month, day_s, year_s in _FULL_MONTH_DATE.findall(provision.body):
+            try:
+                isos.add(date(int(year_s), _MONTHS[month.lower()], int(day_s)).isoformat())
+            except ValueError:
+                continue
+    return words, isos
 
 
 def _with_cited(
@@ -198,9 +248,12 @@ def _extraction_prompt(message: str, as_of: date) -> str:
         "Extract facts from an F-1 student's message for a rules engine. Today is "
         f"{as_of.isoformat()}. Use ISO dates (YYYY-MM-DD) and resolve relative dates against "
         "today. Leave any fact the student did not state as null; never guess. List each job "
-        "the student says they held; never add a job for a period without work (for example "
-        "'unemployed since'). Set a job's related_to_major and hours_per_week only if the "
-        "student says them. List topics outside F-1 student rules in out_of_scope.\n\n"
+        "the student says they held; set jobs to [] only if the student explicitly says they "
+        "have had no jobs, and leave jobs null if they did not mention employment. Never add a "
+        "job for a period without work (for example 'unemployed since'). Set a job's "
+        "related_to_major and hours_per_week only if the student says them. Never repeat "
+        "sensitive personal identifiers (SSN, passport number, A-number, SEVIS ID) in the "
+        "restated question. List topics outside F-1 student rules in out_of_scope.\n\n"
         f"Message:\n{message}"
     )
 

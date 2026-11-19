@@ -46,3 +46,31 @@ def test_dates_the_student_gave_may_be_repeated() -> None:
     given = fact_dates(StudentFacts(program_end_date=date(2026, 5, 15)))
     assert check_explanation(explanation, _ASSESSMENT, _PROVISIONS, given) is None
     assert check_explanation(explanation, _ASSESSMENT, _PROVISIONS) is not None
+
+
+def test_literal_dates_from_retrieved_provisions_are_allowed_but_altered_years_rejected() -> None:
+    provisions = (
+        Hit(
+            "8 CFR 214.2(f)(5)(ii)(C)",
+            (),
+            "Applies to students admitted on or after September 15, 2026, extended until April 1.",
+            0.0,
+        ),
+    )
+    cite = ["8 CFR 214.2(f)(5)(ii)(C)"]
+    for ok_text in (
+        "This applies starting September 15, 2026 and runs until April 1.",
+        "This applies starting 2026-09-15. After day 10 may come another step.",
+        "You get a separate 30-day departure period and a decision 15 days later.",
+    ):
+        assert check_explanation(_explanation(ok_text, cite), _ASSESSMENT, provisions) is None
+    for bad_text in (
+        "This applies starting September 15, 2027.",
+        "This runs until April 1, 2029.",
+        "This runs until April 1 2029.",
+        "This runs until April 1st, 2029.",
+        "File by june 14, 2027.",
+        "File by 15 September 2027.",
+        "This applies starting 2027-09-15.",
+    ):
+        assert check_explanation(_explanation(bad_text, cite), _ASSESSMENT, provisions) is not None

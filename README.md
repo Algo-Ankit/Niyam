@@ -42,7 +42,8 @@ The output always has the same shape:
 - **Assumptions**: conventions the code applied where the regulation is silent
 - **Missing facts**: what Niyam needs to ask instead of guessing
 - **Explanation**: model-written prose, shown only if it passes the checks below
-- **Not covered**: H-1B, green card, taxes, travel and visa stamping, other statuses
+- **Not covered**: H-1B beyond cap-gap, green card, taxes, visa stamping and consular renewal,
+  other statuses
 
 ## How it works
 

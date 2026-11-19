@@ -56,18 +56,51 @@ def test_extraction_set_is_well_formed() -> None:
 
 
 def test_a_phantom_job_changes_the_unemployment_count_and_fails_agreement() -> None:
+    first = Job(start=date(2026, 6, 1), end=date(2026, 8, 10))
     real = StudentFacts(
         opt_start_date=date(2026, 6, 1),
         opt_end_date=date(2027, 5, 31),
-        jobs=[Job(start=date(2026, 6, 1), end=date(2026, 8, 10))],
+        jobs=[first],
     )
     phantom = real.model_copy(
         update={
             "jobs": [
-                *real.jobs,
-                real.jobs[0].model_copy(update={"start": date(2026, 8, 11), "end": None}),
+                first,
+                first.model_copy(update={"start": date(2026, 8, 11), "end": None}),
             ]
         }
     )
     item = Item("x", date(2026, 9, 8), "msg", real, frozenset())
     assert score(item, Extraction(facts=phantom, question="q")).deadlines_agree is False
+
+
+def test_extraction_score_catches_job_attributes_and_null_vs_empty_jobs() -> None:
+    gold = StudentFacts(
+        opt_start_date=date(2026, 6, 1),
+        jobs=[Job(start=date(2026, 6, 1), related_to_major=True, hours_per_week=40)],
+    )
+    item = Item("x", date(2026, 7, 1), "msg", gold, frozenset())
+    wrong_hours = gold.model_copy(
+        update={"jobs": [Job(start=date(2026, 6, 1), related_to_major=True, hours_per_week=15)]}
+    )
+    assert score(item, Extraction(facts=wrong_hours, question="q")).wrong_fields == ("jobs",)
+
+    unemployed = StudentFacts(opt_start_date=date(2026, 6, 1), jobs=[])
+    unmentioned = StudentFacts(opt_start_date=date(2026, 6, 1), jobs=None)
+    item_unemp = Item("y", date(2026, 7, 1), "msg", unemployed, frozenset())
+    assert score(item_unemp, Extraction(facts=unmentioned, question="q")).wrong_fields == ("jobs",)
+
+    # Concurrent jobs sharing a start date with nullable fields must sort without TypeError.
+    job_a = Job(start=date(2026, 6, 1), end=date(2026, 8, 1), related_to_major=True)
+    job_b = Job(start=date(2026, 6, 1), end=None, related_to_major=None, hours_per_week=20)
+    pair_1 = StudentFacts(
+        opt_start_date=date(2026, 6, 1), on_stem_extension=True, jobs=[job_a, job_b]
+    )
+    pair_2 = StudentFacts(
+        opt_start_date=date(2026, 6, 1), on_stem_extension=True, jobs=[job_b, job_a]
+    )
+    res = score(
+        Item("z", date(2026, 9, 1), "msg", pair_1, frozenset()),
+        Extraction(facts=pair_2, question="q"),
+    )
+    assert (res.wrong_fields, res.deadlines_agree) == ((), True)

@@ -4,7 +4,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from niyam.rules.dates import add_business_days, add_months, federal_holidays
+from niyam.rules.dates import add_business_days, add_months, federal_holidays, is_business_day
 from niyam.rules.opt import Finding, Job, StudentFacts, assess
 
 _CORPUS = Path(__file__).parents[1] / "data" / "processed" / "8-cfr-214.2-f.json"
@@ -25,6 +25,12 @@ def test_federal_holidays_move_to_the_observed_weekday() -> None:
     assert date(2027, 6, 18) in federal_holidays(2027)  # Juneteenth 2027 is a Saturday
     assert date(2026, 11, 26) in federal_holidays(2026)  # Thanksgiving
     assert add_business_days(date(2026, 11, 25), 1) == date(2026, 11, 27)
+
+
+def test_year_boundary_observed_new_years_day_is_not_a_business_day() -> None:
+    # Jan 1, 2028 is a Saturday, so its observed holiday is Friday Dec 31, 2027.
+    assert is_business_day(date(2027, 12, 31)) is False
+    assert add_business_days(date(2027, 12, 20), 10) == date(2028, 1, 5)
 
 
 def test_post_completion_filing_window_is_90_days_before_to_30_days_after_program_end() -> None:
@@ -60,7 +66,7 @@ def test_unemployment_counts_days_without_a_job_since_the_ead_start() -> None:
 
 
 def test_unemployment_over_the_limit() -> None:
-    facts = StudentFacts(opt_start_date=date(2026, 6, 1), opt_end_date=date(2027, 5, 31))
+    facts = StudentFacts(opt_start_date=date(2026, 6, 1), opt_end_date=date(2027, 5, 31), jobs=[])
     finding = _by_rule(facts, date(2026, 9, 1))["unemployment_days"]
     assert finding.status == "over_limit"
     assert finding.summary.startswith("93 of 90 allowed days")
@@ -68,10 +74,63 @@ def test_unemployment_over_the_limit() -> None:
 
 def test_stem_extension_raises_the_unemployment_limit_to_150() -> None:
     facts = StudentFacts(
-        opt_start_date=date(2026, 6, 1), opt_end_date=date(2027, 5, 31), on_stem_extension=True
+        opt_start_date=date(2026, 6, 1),
+        opt_end_date=date(2027, 5, 31),
+        on_stem_extension=True,
+        jobs=[],
     )
     finding = _by_rule(facts, date(2026, 9, 1))["unemployment_days"]
     assert (finding.status, finding.summary[:22]) == ("within_limit", "93 of 150 allowed days")
+
+
+def test_unmentioned_jobs_ask_instead_of_claiming_over_limit() -> None:
+    facts = StudentFacts(opt_start_date=date(2026, 6, 1), opt_end_date=date(2027, 5, 31))
+    assessment = assess(facts, date(2027, 2, 1))
+    assert "unemployment_days" not in {f.rule for f in assessment.findings}
+    assert "your OPT jobs (or whether you have been unemployed)" in assessment.missing
+
+
+def test_stem_extension_without_opt_end_date_does_not_crash_and_reports_job_deadlines() -> None:
+    facts = StudentFacts(
+        opt_start_date=date(2026, 6, 1),
+        on_stem_extension=True,
+        jobs=[Job(employer="Acme", start=date(2028, 2, 25), end=date(2028, 3, 1))],
+    )
+    rules = _by_rule(facts, date(2028, 3, 2))
+    assert rules["stem_new_employer_i983"].closes == date(2028, 3, 6)
+    assert rules["stem_report_loss_of_employment"].closes == date(2028, 3, 11)
+    assert "unemployment_days" in rules
+
+
+def test_inverted_opt_dates_are_flagged_instead_of_computing_bogus_findings() -> None:
+    facts = StudentFacts(
+        opt_start_date=date(2027, 6, 1),
+        opt_end_date=date(2026, 12, 1),
+        stem_degree=True,
+        on_stem_extension=True,
+        jobs=[Job(start=date(2027, 6, 1))],
+    )
+    assessment = assess(facts, date(2027, 7, 1))
+    assert assessment.findings == ()
+    assert any("end date is earlier than start date" in m for m in assessment.missing)
+
+
+def test_departure_period_after_program_end_when_not_on_opt() -> None:
+    rules = _by_rule(StudentFacts(program_end_date=date(2026, 12, 18)), date(2026, 12, 20))
+    assert rules["departure_period"].closes == date(2027, 1, 17)
+    stem = _by_rule(
+        StudentFacts(program_end_date=date(2026, 12, 18), on_stem_extension=True),
+        date(2027, 5, 1),
+    )
+    assert "departure_period" not in stem
+
+
+def test_out_of_range_h1b_fiscal_year_does_not_crash() -> None:
+    for bad_fy in (0, 27, 10000):
+        facts = _cap_gap_student(h1b_change_of_status=True, h1b_fiscal_year=bad_fy)
+        assessment = assess(facts, date(2026, 7, 15))
+        assert "cap_gap_extension" not in {f.rule for f in assessment.findings}
+        assert "confirm the 4-digit H-1B fiscal year" in assessment.missing
 
 
 def test_stem_filing_window_and_60_day_recommendation_limit() -> None:
@@ -278,6 +337,7 @@ def test_denied_petition_ends_cap_gap_with_the_cautious_departure_date() -> None
     departure = rules["cap_gap_departure"]
     assert departure.closes == date(2026, 8, 31)  # later of 2026-08-01 and 2026-06-30, + 30
     assert "SEVP's 2025 guidance says 60 days" in departure.assumptions[0]
+    assert "departure_period" not in rules
 
 
 def test_cap_gap_questions_are_asked_only_after_a_petition_is_mentioned() -> None:

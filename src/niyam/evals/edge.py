@@ -35,10 +35,12 @@ class Case:
     scope: Scope
     gold_paragraphs: tuple[str, ...]
     deadlines: tuple[str, ...]  # ISO dates
-    counts: tuple[int, ...]
+    any_deadline: bool  # True when `deadlines` lists mutually exclusive alternatives
+    counts: tuple[tuple[str, int], ...]  # (what, value) pairs
     must_ask: bool
     must_say: tuple[str, ...]
     must_not_say: tuple[str, ...]
+    forbidden_literals: tuple[str, ...]  # literal leak strings checked mechanically
     ambiguous: bool
     confidence: str
 
@@ -112,12 +114,15 @@ def evaluate(case: Case, reply: Reply, judge_model: GenerativeModel) -> CaseScor
         case.ambiguous,
         case.confidence,
         _scope_ok(case.scope, reply),
-        set(case.deadlines) <= computed if case.deadlines else None,
-        all(_count_stated(n, summaries) for n in case.counts) if case.counts else None,
+        _deadlines_ok(case.deadlines, computed, any_deadline=case.any_deadline),
+        all(_count_stated(what, value, summaries) for what, value in case.counts)
+        if case.counts
+        else None,
         bool(reply.assessment.missing) if case.must_ask else None,
-        bool(cited & set(case.gold_paragraphs)) if case.gold_paragraphs else None,
-        case.category != _SECURITY
-        or not any(phrase.lower() in text.lower() for phrase in case.must_not_say),
+        bool(cited & set(case.gold_paragraphs))
+        if (case.gold_paragraphs and case.scope != "out")
+        else None,
+        not any(phrase.lower() in text.lower() for phrase in case.forbidden_literals),
         says,
         avoids,
         reason,
@@ -163,11 +168,26 @@ def _scope_ok(scope: Scope, reply: Reply) -> bool:
         return flagged or not reply.explanation.answerable
     if scope == "partial":
         return flagged and answers
-    return answers or bool(reply.assessment.missing)
+    return not flagged and (answers or bool(reply.assessment.missing))
 
 
-def _count_stated(count: int, summaries: str) -> bool:
-    """`count` as a day count the findings state ("29 of 90 allowed", "61 left"), not any digit."""
+def _deadlines_ok(
+    expected: tuple[str, ...], computed: set[str], *, any_deadline: bool
+) -> bool | None:
+    if not expected:
+        return None
+    if any_deadline:
+        return any(d in computed for d in expected)
+    return set(expected) <= computed
+
+
+def _count_stated(what: str, count: int, summaries: str) -> bool:
+    """`count` in the matching role ("used" -> "N of M allowed", "remaining"/"left" -> "N left")."""
+    label = what.lower()
+    if "remaining" in label or "left" in label:
+        return re.search(rf"\b{count} left\b", summaries) is not None
+    if "used" in label or "unemployment" in label:
+        return re.search(rf"\b{count} of \d+ allowed\b", summaries) is not None
     return re.search(rf"\b{count} of \d+ allowed\b|\b{count} left\b", summaries) is not None
 
 
@@ -177,20 +197,34 @@ def _bullets(items: tuple[str, ...]) -> str:
 
 def _case(row: dict[str, object]) -> Case:
     deadlines, counts = _dicts(row.get("expected_deadlines")), _dicts(row.get("expected_counts"))
+    category = str(row["category"])
+    must_not_say = tuple(str(s) for s in _list(row.get("must_not_say")))
+    if "forbidden_literals" in row:
+        literals = tuple(str(s) for s in _list(row.get("forbidden_literals")))
+    elif category == _SECURITY:
+        literals = must_not_say
+    else:
+        literals = ()
     return Case(
         str(row["id"]),
-        str(row["category"]),
+        category,
         date.fromisoformat(str(row["as_of"])),
         str(row["message"]),
         _scope(row["scope"]),
         tuple(str(c) for c in _list(row.get("gold_paragraphs"))),
         tuple(str(d["date"]) for d in deadlines if d.get("date")),
-        tuple(v for c in counts if isinstance(v := c.get("value"), int)),
+        bool(row.get("any_deadline")),
+        tuple(
+            (str(c.get("what", "")), v)
+            for c in counts
+            if isinstance(v := c.get("value"), int) and not isinstance(v, bool)
+        ),
         bool(_list(row.get("must_ask_for"))),
         tuple(str(s) for s in _list(row.get("must_say"))),
-        tuple(str(s) for s in _list(row.get("must_not_say"))),
+        must_not_say,
+        literals,
         bool(row.get("ambiguous")),
-        str(row.get("confidence")),
+        str(row["confidence"]),
     )
 
 

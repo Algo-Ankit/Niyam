@@ -29,7 +29,12 @@ def federal_holidays(year: int) -> set[date]:
 
 
 def is_business_day(day: date) -> bool:
-    return day.weekday() < _SATURDAY and day not in federal_holidays(day.year)
+    # NOTE: When Jan 1 falls on a Saturday, its observed holiday is Dec 31 of the prior year,
+    # which `federal_holidays` returns under `year + 1`.
+    holidays = federal_holidays(day.year)
+    if day.month == 12:
+        holidays |= federal_holidays(day.year + 1)
+    return day.weekday() < _SATURDAY and day not in holidays
 
 
 def add_business_days(start: date, days: int) -> date:

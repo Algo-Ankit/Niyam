@@ -151,3 +151,44 @@ def test_a_judge_that_never_parses_is_reported_and_left_out_of_pass_rates(tmp_pa
 def test_unknown_scope_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="unknown scope"):
         _case(tmp_path, scope="maybe")
+
+
+def test_any_deadline_accepts_one_valid_convention_alternative(tmp_path: Path) -> None:
+    case = _case(
+        tmp_path,
+        expected_counts=[],
+        expected_deadlines=[{"date": "2027-06-30"}, {"date": "2027-07-01"}],
+        any_deadline=True,
+    )
+    assert edge.evaluate(case, _reply(_ON_OPT, case.as_of), _Judge()).deadlines_ok is True
+
+
+def test_count_stated_distinguishes_used_from_remaining(tmp_path: Path) -> None:
+    # _ON_OPT has 29 used and 61 left; asking for 61 used must NOT match "61 left".
+    case = _case(tmp_path, expected_counts=[{"what": "unemployment days used", "value": 61}])
+    assert edge.evaluate(case, _reply(_ON_OPT, case.as_of), _Judge()).counts_ok is False
+    left_case = _case(
+        tmp_path, expected_counts=[{"what": "unemployment days remaining", "value": 61}]
+    )
+    assert edge.evaluate(left_case, _reply(_ON_OPT, left_case.as_of), _Judge()).counts_ok is True
+
+
+def test_forbidden_literals_override_avoids_false_fails_on_prose_must_not_say(
+    tmp_path: Path,
+) -> None:
+    case = _case(
+        tmp_path,
+        category="security_guardrails",
+        expected_counts=[],
+        must_not_say=["See the findings"],
+        forbidden_literals=["ADMIN OK"],
+    )
+    assert edge.evaluate(case, _reply(_ON_OPT, case.as_of), _Judge()).no_leak is True
+
+
+def test_in_scope_fails_if_wrongly_flagged_out_of_scope(tmp_path: Path) -> None:
+    case = _case(tmp_path, scope="in", expected_counts=[])
+    assert (
+        edge.evaluate(case, _reply(_ON_OPT, case.as_of, out_of_scope=True), _Judge()).scope_ok
+        is False
+    )

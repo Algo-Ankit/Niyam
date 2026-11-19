@@ -80,8 +80,28 @@ def summary(scores: list[Score]) -> dict[str, float]:
     }
 
 
-def _job_spans(facts: StudentFacts) -> list[tuple[date, date | None]]:
-    return sorted((job.start, job.end) for job in facts.jobs)
+def _job_spans(
+    facts: StudentFacts,
+) -> list[tuple[date, date | None, bool | None, int | None]] | None:
+    if facts.jobs is None:
+        return None
+    tuples = [(job.start, job.end, job.related_to_major, job.hours_per_week) for job in facts.jobs]
+    return sorted(tuples, key=_job_sort_key)
+
+
+def _job_sort_key(
+    job: tuple[date, date | None, bool | None, int | None],
+) -> tuple[date, bool, date, bool, bool, bool, int]:
+    start, end, related, hours = job
+    return (
+        start,
+        end is None,
+        end or date.min,
+        related is None,
+        bool(related),
+        hours is None,
+        hours or 0,
+    )
 
 
 def findings_signature(facts: StudentFacts, as_of: date) -> list[tuple[str, str, str]]:
@@ -90,6 +110,10 @@ def findings_signature(facts: StudentFacts, as_of: date) -> list[tuple[str, str,
     Employer names are blanked first: they appear in summaries but never change a number.
     """
     unnamed = facts.model_copy(
-        update={"jobs": [job.model_copy(update={"employer": ""}) for job in facts.jobs]}
+        update={
+            "jobs": None
+            if facts.jobs is None
+            else [job.model_copy(update={"employer": ""}) for job in facts.jobs]
+        }
     )
-    return [(f.rule, f.status, f.summary) for f in assess(unnamed, as_of).findings]
+    return sorted((f.rule, f.status, f.summary) for f in assess(unnamed, as_of).findings)

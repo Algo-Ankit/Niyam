@@ -422,3 +422,37 @@ declines. It is not scored until the owner has marked those cases on the gold re
 their gold is rewritten to expect a decline.
 *Why:* a narrow assistant that knows its limits is more reliable than a broad one that
 guesses. *Tradeoff:* H-1B questions beyond cap-gap get a referral, not an answer.
+
+**D58. Rules-engine, guardrail, and scope bug fixes from the gold audit.** Owner-approved on
+2026-11-19. Four code changes: (1) `StudentFacts.jobs` becomes `list[Job] | None = None` so
+unmentioned employment asks instead of falsely computing `over_limit` unemployment, while
+`jobs=[]` still represents explicit unemployment; (2) `OutOfScope` narrows `"travel, visa
+stamping or re-entry"` to `"visa stamping or consular renewal"`, because 8 CFR 214.2(f)(4) and
+(f)(13) are indexed and cover F-1/OPT re-entry documents; (3) `check_explanation()` allows dates
+quoted verbatim from the given regulation provisions (e.g. "April 1", "September 15, 2026", and
+their ISO equivalents) while still rejecting altered years or ungrounded dates; (4) `opt.py` and
+`dates.py` fix the STEM-without-`opt_end_date` crash, year-boundary observed New Year's Day
+(`2027-12-31`), inverted OPT dates, program-end departure period, and duplicate departure
+findings after terminated cap-gap.
+*Why:* these were live crashes, false guardrails, and scope contradictions uncovered before
+running the full offline evals. *Tradeoff:* changing `StudentFacts.jobs` and the extraction
+prompt invalidates cached extraction responses, so the next eval run makes fresh extraction
+calls.
+
+**D59. Eval scorer and P0 gold-set fixes.** Owner-approved on 2026-11-19. In `edge.py`: separate
+mechanical leak checks (`forbidden_literals`) from semantic `must_not_say` rubric points so safe
+refusals do not trip on ordinary words ("Yes.", "E-Verify number", "60 days"); add
+`any_deadline` for mutually exclusive convention alternatives; make `_count_stated` distinguish
+"used" from "remaining"/"left"; require `scope="in"` replies not to be flagged `out_of_scope`;
+and skip `cites_gold` on `scope="out"` declines. In `extraction.py`: include `related_to_major`,
+`hours_per_week`, and `None` vs `[]` when scoring `jobs`. Fixed verified P0 gold bugs in
+`retrieval-dev.jsonl` (`d16`, `d22`, `d26`, `d30`, `d34`, `d35`, `d51`, `d58`),
+`retrieval-test.jsonl` (`r05`, `r14`, `r19`, `r28`), `extraction.jsonl` (`e07`),
+`pipeline.jsonl` (`p05`, `p08`, `p19`, `p24`, `p27`, `p33`), `edge_cases.jsonl` (`x010`, `x018`,
+`x040`, `x047`, `x052`, `x054`, `x068`, `x069`, `x081`, `x084`), and `decline_and_security.jsonl`
+(`y020`, `y024`–`y040`).
+`h1b_cases.jsonl` stays untouched per D57.
+*Why:* scorer and gold bugs caused both false failures and false passes that would corrupt eval
+numbers. *Tradeoff:* editing 4 gold lists in `retrieval-test.jsonl` (adding missing valid
+paragraphs only) means future test retrieval scores are not strictly comparable to R4/R8 without
+noting the added alternatives.

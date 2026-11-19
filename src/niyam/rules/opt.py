@@ -73,7 +73,11 @@ class StudentFacts(BaseModel):
     on_stem_extension: bool | None = Field(
         default=None, description="Whether a 24-month STEM OPT extension has been approved"
     )
-    jobs: list[Job] = Field(default_factory=list, description="Jobs held during OPT")
+    jobs: list[Job] | None = Field(
+        default=None,
+        description="Jobs held during OPT; [] only if the student explicitly says they had no "
+        "jobs; null if the student did not mention employment history",
+    )
     h1b_petition_filed: bool | None = Field(
         default=None,
         description="True if the student says an employer filed a cap-subject H-1B petition for "
@@ -127,6 +131,7 @@ def assess(facts: StudentFacts, as_of: date) -> Assessment:
             missing.extend(n for n in absent if n not in missing)
         else:
             findings.extend(rule(facts, as_of))
+    missing.extend(_date_contradictions(facts))
     missing.extend(_unconfirmed_job_facts(facts))
     missing.extend(_unconfirmed_cap_gap_facts(facts))
     return Assessment(tuple(findings), tuple(missing))
@@ -176,23 +181,33 @@ def _opt_completion_limit(facts: StudentFacts, as_of: date) -> Iterable[Finding]
 
 
 def _unemployment(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
+    if facts.jobs is None or _opt_dates_inverted(facts):
+        return
     start = _known(facts.opt_start_date)
     stem = bool(facts.on_stem_extension)
     limit = 150 if stem else 90
-    authorized_end = _stem_end(facts) if stem else facts.opt_end_date
+    authorized_end = (
+        _stem_end(facts) if (stem and facts.opt_end_date is not None) else facts.opt_end_date
+    )
     last_day = min(as_of, authorized_end) if authorized_end else as_of
-    stem_start = _known(facts.opt_end_date) + timedelta(days=1) if stem else None
+    stem_start = _stem_start(facts)
     used = _days_without_a_job(start, last_day, facts.jobs, as_of, stem_start)
     status: Status = "over_limit" if used > limit else "within_limit"
+    assumptions = [
+        "Counting starts on the OPT EAD start date (SEVP practice; the regulation is silent).",
+        *_job_assumptions(facts.jobs, stem_start),
+    ]
+    if stem and facts.opt_end_date is None:
+        assumptions.append(
+            "Initial OPT end date was not given, so the STEM OPT 20-hour minimum could not be "
+            "checked by date."
+        )
     yield Finding(
         "unemployment_days",
         f"{_CFR}(10)(ii)(E)",
         f"{used} of {limit} allowed days of unemployment used, {max(limit - used, 0)} left",
         status,
-        assumptions=(
-            "Counting starts on the OPT EAD start date (SEVP practice; the regulation is silent).",
-            *_job_assumptions(facts.jobs, stem_start),
-        ),
+        assumptions=tuple(assumptions),
     )
 
 
@@ -215,7 +230,7 @@ def _job_assumptions(jobs: list[Job], stem_start: date | None) -> Iterable[str]:
 
 
 def _stem_filing_window(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
-    if not facts.stem_degree or facts.on_stem_extension:
+    if not facts.stem_degree or facts.on_stem_extension or _opt_dates_inverted(facts):
         return
     expiry = _known(facts.opt_end_date)
     opens, closes = expiry - timedelta(days=90), expiry
@@ -235,7 +250,7 @@ def _stem_filing_window(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
 
 
 def _stem_obligations(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
-    if not facts.on_stem_extension:
+    if not facts.on_stem_extension or _opt_dates_inverted(facts):
         return
     start = _known(facts.opt_end_date) + timedelta(days=1)
     end = _stem_end(facts)
@@ -269,9 +284,22 @@ def _stem_obligations(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
         _deadline(evaluation_due, as_of),
         closes=evaluation_due,
     )
+
+
+def _stem_job_reports(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
+    if not facts.on_stem_extension or not facts.jobs or _opt_dates_inverted(facts):
+        return
+    start: date | None
+    end: date | None
+    if facts.opt_end_date is not None:
+        start, end = facts.opt_end_date + timedelta(days=1), _stem_end(facts)
+        extra_assumptions: tuple[str, ...] = ()
+    else:
+        start = end = None
+        extra_assumptions = ("Assumes this job change occurred during your STEM OPT extension.",)
     for job in facts.jobs:
         name = job.employer or "a job"
-        if start <= job.start <= end:
+        if start is None or (end is not None and start <= job.start <= end):
             due = job.start + timedelta(days=10)
             yield Finding(
                 "stem_new_employer_i983",
@@ -279,9 +307,9 @@ def _stem_obligations(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
                 f"New Form I-983 for {name} (started {job.start}) is due to the DSO by {due}",
                 _deadline(due, as_of),
                 closes=due,
-                assumptions=("Applies when the job is with a new employer.",),
+                assumptions=("Applies when the job is with a new employer.", *extra_assumptions),
             )
-        if job.end is not None and start <= job.end <= end:
+        if job.end is not None and (start is None or (end is not None and start <= job.end <= end)):
             due = job.end + timedelta(days=10)
             yield Finding(
                 "stem_report_loss_of_employment",
@@ -289,23 +317,39 @@ def _stem_obligations(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
                 f"Report the end of {name} ({job.end}) to the DSO by {due}",
                 _deadline(due, as_of),
                 closes=due,
+                assumptions=extra_assumptions,
             )
 
 
 def _departure_period(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
-    if _cap_gap_applies(facts):
-        return  # status is extended past the OPT end date; see _cap_gap
-    authorized_end = _stem_end(facts) if facts.on_stem_extension else _known(facts.opt_end_date)
-    last = authorized_end + timedelta(days=30)
-    yield Finding(
-        "departure_period",
-        f"{_CFR}(5)(v)",
-        f"After OPT ends on {authorized_end}, the 30-day period to depart or change status ends "
-        f"on {last}",
-        _deadline(last, as_of),
-        closes=last,
-        assumptions=("Assumes no further OPT or change of status is pending.",),
-    )
+    if _cap_gap_handles_departure(facts) or _opt_dates_inverted(facts):
+        return  # cap-gap sets the departure/extension end date, or OPT dates contradict
+    if facts.opt_end_date is not None:
+        authorized_end = _stem_end(facts) if facts.on_stem_extension else facts.opt_end_date
+        last = authorized_end + timedelta(days=30)
+        yield Finding(
+            "departure_period",
+            f"{_CFR}(5)(v)",
+            f"After OPT ends on {authorized_end}, the 30-day period to depart or change status "
+            f"ends on {last}",
+            _deadline(last, as_of),
+            closes=last,
+            assumptions=("Assumes no further OPT or change of status is pending.",),
+        )
+    elif (
+        facts.program_end_date is not None
+        and facts.opt_start_date is None
+        and not facts.on_stem_extension
+    ):
+        last = facts.program_end_date + timedelta(days=30)
+        yield Finding(
+            "departure_period",
+            f"{_CFR}(5)(v)",
+            f"After your program ends, the 30-day period to depart or change status ends on {last}",
+            _deadline(last, as_of),
+            closes=last,
+            assumptions=("Applies if you do not apply for OPT, transfer, or change status.",),
+        )
 
 
 def _cap_gap(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
@@ -321,7 +365,7 @@ def _cap_gap(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
             "not_applicable",
         )
         return
-    if facts.h1b_fiscal_year is None:
+    if facts.h1b_fiscal_year is None or not _valid_fiscal_year(facts.h1b_fiscal_year):
         return
     if facts.h1b_petition_outcome in _TERMINATING:
         yield Finding(
@@ -359,7 +403,7 @@ def _cap_gap(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
 # extension. SEVP's page (2025-04-10) says 60 days from the later of termination and the OPT end,
 # but predates the 2026 rule that cut (f)(5)(v) to 30 days; we give the cautious 30-day date.
 def _cap_gap_departure(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
-    if facts.h1b_outcome_date is None:
+    if facts.h1b_outcome_date is None or _opt_dates_inverted(facts):
         return
     ends = [facts.h1b_outcome_date]
     if facts.opt_end_date is not None:
@@ -380,13 +424,33 @@ def _cap_gap_departure(facts: StudentFacts, as_of: date) -> Iterable[Finding]:
     )
 
 
-def _cap_gap_applies(facts: StudentFacts) -> bool:
+def _cap_gap_handles_departure(facts: StudentFacts) -> bool:
+    """True when cap-gap (active or terminated) supersedes the ordinary post-OPT departure rule."""
     return bool(
         facts.h1b_petition_filed
         and facts.h1b_change_of_status is not False
         and facts.h1b_fiscal_year is not None
-        and facts.h1b_petition_outcome not in _TERMINATING
+        and _valid_fiscal_year(facts.h1b_fiscal_year)
     )
+
+
+def _valid_fiscal_year(year: int) -> bool:
+    return 2000 <= year <= 2100
+
+
+def _opt_dates_inverted(facts: StudentFacts) -> bool:
+    return (
+        facts.opt_start_date is not None
+        and facts.opt_end_date is not None
+        and facts.opt_end_date < facts.opt_start_date
+    )
+
+
+def _date_contradictions(facts: StudentFacts) -> Iterable[str]:
+    if _opt_dates_inverted(facts):
+        yield "confirm your OPT start and end dates (end date is earlier than start date)"
+    if facts.h1b_fiscal_year is not None and not _valid_fiscal_year(facts.h1b_fiscal_year):
+        yield "confirm the 4-digit H-1B fiscal year"
 
 
 _Rule = Callable[[StudentFacts, date], Iterable[Finding]]
@@ -397,9 +461,16 @@ _RULES: tuple[tuple[tuple[str, ...], _Rule], ...] = (
     (("opt_start_date",), _unemployment),
     (("opt_end_date", "stem_degree"), _stem_filing_window),
     (("opt_end_date",), _stem_obligations),
-    (("opt_end_date",), _departure_period),
+    ((), _stem_job_reports),
+    ((), _departure_period),
     ((), _cap_gap),
 )
+
+
+def _stem_start(facts: StudentFacts) -> date | None:
+    if facts.on_stem_extension and facts.opt_end_date is not None:
+        return facts.opt_end_date + timedelta(days=1)
+    return None
 
 
 def _stem_end(facts: StudentFacts) -> date:
@@ -431,10 +502,14 @@ def _days_without_a_job(
 
 
 def _unconfirmed_job_facts(facts: StudentFacts) -> Iterable[str]:
-    """Job facts the unemployment count assumed, so the assistant asks for them."""
+    """Job facts needed for unemployment counting or assumed on listed jobs."""
+    if facts.jobs is None:
+        if facts.opt_start_date is not None and not _opt_dates_inverted(facts):
+            yield "your OPT jobs (or whether you have been unemployed)"
+        return
     if any(job.related_to_major is None for job in facts.jobs):
         yield "whether each job is directly related to your major"
-    stem_start = _known(facts.opt_end_date) + timedelta(days=1) if facts.on_stem_extension else None
+    stem_start = _stem_start(facts)
     if any(_in_stem_period(j, stem_start) and j.hours_per_week is None for j in facts.jobs):
         yield "hours per week of each job during STEM OPT"
 
