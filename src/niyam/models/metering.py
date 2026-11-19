@@ -11,7 +11,12 @@ from collections.abc import Callable, Mapping, Sequence
 from pydantic import BaseModel
 
 from niyam.config import RateLimits
-from niyam.models.errors import BudgetExceededError, QuotaExhaustedError, RateLimitedError
+from niyam.models.errors import (
+    BudgetExceededError,
+    ProviderUnavailableError,
+    QuotaExhaustedError,
+    RateLimitedError,
+)
 from niyam.models.interfaces import DecisionModel, Embedder, GenerativeModel
 from niyam.models.ledger import CostLedger
 from niyam.models.ratelimit import SlidingWindowLimiter, estimate_tokens
@@ -81,12 +86,15 @@ class Meter:
             self._limiter.acquire(estimated_tokens, requests)
             try:
                 result = call()
-            except RateLimitedError as error:
-                # A rejected request may still count against the provider's daily quota.
+            except (RateLimitedError, ProviderUnavailableError) as error:
+                # A rejected request may still count against the provider's daily quota (D55).
                 self._ledger.record(self.provider, self.model_id, Usage(), 0.0, requests)
                 if attempt == self._max_retries:
                     raise
-                self._sleep(error.retry_after_seconds or BACKOFF_BASE_SECONDS * 2**attempt)
+                retry_after = (
+                    error.retry_after_seconds if isinstance(error, RateLimitedError) else None
+                )
+                self._sleep(retry_after or BACKOFF_BASE_SECONDS * 2**attempt)
             else:
                 usage = usage_of(result)
                 cost = usage.input_tokens * self._price

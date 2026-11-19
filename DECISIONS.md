@@ -390,3 +390,15 @@ per category, per confidence and for ambiguous cases separately. Unlike the pipe
 deadlines never come from our own rules engine.
 *Why:* removes the builder grading its own homework. *Tradeoff:* the gold is still model-
 written until the owner's review; about 3 to 4 model requests per case.
+
+**D55. Retry temporary provider errors three times and count every attempt against quota.**
+Owner-approved on 2026-11-19. A Gemini 503 ("high demand") from the judge stopped eval-edge
+after about 6 cases. Two causes: retries defaulted to 0, and the generator and judge use the
+interactions API, whose errors (google.genai._gaos compat_errors) are not the errors.APIError
+our adapter translated, so even a 429 there crashed. Now a 429 is a rate limit, any 5xx is a
+temporary provider failure, and both are retried up to 3 times with 2, 4 and 8 second waits.
+Google's troubleshooting page names 429 and 503 as retryable and says to retry 5xx. Every
+rejected attempt is recorded in the ledger as a request, because the page does not say
+whether failed requests count against quota.
+*Why:* long eval runs on free-tier models die on short provider spikes. *Tradeoff:* a run can
+wait about 14 seconds per failing call; the ledger may over-count requests on bad days.

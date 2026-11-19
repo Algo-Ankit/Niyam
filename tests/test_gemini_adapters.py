@@ -6,10 +6,11 @@ from typing import Any
 import httpx
 import pytest
 from google.genai import errors
+from google.genai._gaos.lib import compat_errors
 from pydantic import BaseModel
 
 from niyam.config import ThinkingLevel
-from niyam.models.errors import ProviderResponseError, RateLimitedError
+from niyam.models.errors import ProviderResponseError, ProviderUnavailableError, RateLimitedError
 from niyam.models.gemini import GeminiDecisionModel, GeminiEmbedder, GeminiGenerativeModel
 from niyam.models.types import EmbeddingInput, GenerationRequest
 
@@ -78,6 +79,39 @@ def test_other_api_errors_propagate_unchanged() -> None:
     model = GeminiDecisionModel(stub_client(decisions=SimpleNamespace(create=create)), "d1")
     with pytest.raises(errors.ClientError):
         model.decide("s", {"a": "?"})
+
+
+def test_http_5xx_becomes_provider_unavailable_error() -> None:
+    def create(**_: Any) -> None:
+        raise errors.ServerError(503, {"error": {"message": "busy"}}, httpx.Response(503))
+
+    model = GeminiDecisionModel(stub_client(decisions=SimpleNamespace(create=create)), "d1")
+    with pytest.raises(ProviderUnavailableError):
+        model.decide("s", {"a": "?"})
+
+
+def interactions_raising(status: int) -> Any:
+    response = httpx.Response(status, request=httpx.Request("POST", "https://example.test"))
+
+    def create(**_: Any) -> None:
+        raise compat_errors.APIStatusError("error", response=response, body=None)
+
+    return SimpleNamespace(create=create)
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"), [(429, RateLimitedError), (503, ProviderUnavailableError)]
+)
+def test_interactions_api_errors_are_translated(status: int, expected: type[Exception]) -> None:
+    client = stub_client(interactions=interactions_raising(status))
+    with pytest.raises(expected):
+        GeminiGenerativeModel(client, "h").generate(GenerationRequest("p", Answer, "low"))
+
+
+def test_interactions_api_client_errors_propagate_unchanged() -> None:
+    client = stub_client(interactions=interactions_raising(400))
+    with pytest.raises(compat_errors.APIStatusError):
+        GeminiGenerativeModel(client, "h").generate(GenerationRequest("p", Answer, "low"))
 
 
 class Answer(BaseModel):

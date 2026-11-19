@@ -5,7 +5,12 @@ import pytest
 
 from fakes import FakeDecisionModel, FakeEmbedder
 from niyam.config import RateLimits
-from niyam.models.errors import BudgetExceededError, QuotaExhaustedError, RateLimitedError
+from niyam.models.errors import (
+    BudgetExceededError,
+    ProviderUnavailableError,
+    QuotaExhaustedError,
+    RateLimitedError,
+)
 from niyam.models.ledger import CostLedger
 from niyam.models.metering import Meter, MeteredDecisionModel, MeteredEmbedder
 from niyam.models.types import EmbeddingInput, Usage
@@ -64,6 +69,32 @@ def test_rate_limited_call_is_retried_with_backoff_then_succeeds(ledger: CostLed
     assert meter.run(1, flaky, lambda _: Usage(input_tokens=1)) == "ok"
     assert slept == [2.0, 4.0]
     assert ledger.requests_today("m") == 3  # rejected requests still count toward the day
+
+
+def test_unavailable_provider_is_retried_and_every_attempt_counts(ledger: CostLedger) -> None:
+    attempts = {"n": 0}
+
+    def overloaded_twice() -> str:
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            raise ProviderUnavailableError("503")
+        return "ok"
+
+    meter, slept = make_meter(ledger, max_retries=3)
+    assert meter.run(1, overloaded_twice, lambda _: Usage(input_tokens=1)) == "ok"
+    assert slept == [2.0, 4.0]
+    assert ledger.requests_today("m") == 3
+
+
+def test_unavailable_provider_gives_up_after_the_last_retry(ledger: CostLedger) -> None:
+    def overloaded() -> str:
+        raise ProviderUnavailableError("503")
+
+    meter, slept = make_meter(ledger, max_retries=3)
+    with pytest.raises(ProviderUnavailableError):
+        meter.run(1, overloaded, lambda _: Usage())
+    assert slept == [2.0, 4.0, 8.0]
+    assert ledger.requests_today("m") == 4
 
 
 def test_retry_after_from_provider_is_honoured(ledger: CostLedger) -> None:

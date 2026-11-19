@@ -13,6 +13,10 @@ class RateLimitedError(ModelError):
         self.retry_after_seconds = retry_after_seconds
 
 
+class ProviderUnavailableError(ModelError):
+    """The provider failed temporarily (HTTP 5xx, e.g. 503 high demand); a retry may succeed."""
+
+
 class QuotaExhaustedError(ModelError):
     """A local daily request quota has been reached; calling would exceed the free tier."""
 

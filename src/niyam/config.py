@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     embedding_limits: RateLimits = RateLimits(
         requests_per_minute=100, tokens_per_minute=30_000, requests_per_day=1_000
     )
-    max_rate_limit_retries: int = Field(default=0, ge=0)
+    max_rate_limit_retries: int = Field(default=3, ge=0)  # D55; also covers 5xx
 
     # Observability and storage.
     langfuse_public_key: SecretStr

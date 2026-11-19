@@ -15,9 +15,10 @@ from typing import Any, Literal, cast
 
 from google import genai
 from google.genai import errors, types
+from google.genai._gaos.lib import compat_errors
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from niyam.models.errors import ProviderResponseError, RateLimitedError
+from niyam.models.errors import ProviderResponseError, ProviderUnavailableError, RateLimitedError
 from niyam.models.ratelimit import estimate_tokens
 from niyam.models.types import (
     DecisionResult,
@@ -29,6 +30,7 @@ from niyam.models.types import (
 )
 
 HTTP_TOO_MANY_REQUESTS = 429
+HTTP_SERVER_ERRORS = range(500, 600)  # Google's troubleshooting page: retry 5xx (D55)
 EMBEDDING_MAX_INPUT_TOKENS = 8192  # documented limit; longer input is silently truncated
 
 
@@ -72,14 +74,25 @@ def _validated[B: _Boundary](boundary: type[B], response: object, model_id: str)
         raise ProviderResponseError(f"{model_id}: unexpected response shape") from error
 
 
+# NOTE: the Interactions API (generation) raises compat_errors from a private SDK package, not
+# errors.APIError (google-genai 3.3.0). Tests build one, so a moved module fails loudly.
 @contextmanager
-def _rate_limits_translated(model_id: str) -> Iterator[None]:
+def _transient_errors_translated(model_id: str) -> Iterator[None]:
     try:
         yield
     except errors.APIError as error:
-        if error.code == HTTP_TOO_MANY_REQUESTS:
-            raise RateLimitedError(f"{model_id}: rate limited by the Gemini API") from error
+        _raise_if_transient(model_id, error.code, error)
         raise
+    except compat_errors.APIStatusError as error:
+        _raise_if_transient(model_id, error.status_code, error)
+        raise
+
+
+def _raise_if_transient(model_id: str, status: int | None, error: Exception) -> None:
+    if status == HTTP_TOO_MANY_REQUESTS:
+        raise RateLimitedError(f"{model_id}: rate limited by the Gemini API") from error
+    if status in HTTP_SERVER_ERRORS:
+        raise ProviderUnavailableError(f"{model_id}: Gemini API error {status}") from error
 
 
 class GeminiDecisionModel:
@@ -95,7 +108,7 @@ class GeminiDecisionModel:
         if not questions:
             raise ValueError("at least one question is required")
         payload = {name: {"type": "noul", "instructions": text} for name, text in questions.items()}
-        with _rate_limits_translated(self._model_id):
+        with _transient_errors_translated(self._model_id):
             raw = self._client.decisions.create(
                 model=self._model_id,
                 input=state,
@@ -126,7 +139,7 @@ class GeminiGenerativeModel:
             if request.thinking_level is None
             else {"generation_config": {"thinking_level": request.thinking_level}}
         )
-        with _rate_limits_translated(self._model_id):
+        with _transient_errors_translated(self._model_id):
             raw = self._client.interactions.create(
                 model=self._model_id,
                 input=request.prompt,
@@ -179,7 +192,7 @@ class GeminiEmbedder:
         if too_long:
             raise ValueError(f"inputs {too_long} exceed {EMBEDDING_MAX_INPUT_TOKENS} tokens")
 
-        with _rate_limits_translated(self._model_id):
+        with _transient_errors_translated(self._model_id):
             response = self._client.models.embed_content(
                 model=self._model_id,
                 contents=[types.Content(parts=[types.Part.from_text(text=t)]) for t in texts],
