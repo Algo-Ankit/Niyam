@@ -198,20 +198,22 @@ def _eval_answers(output: Path) -> int:
 def _eval_pipeline(output: Path) -> int:
     settings = get_settings()
     scenarios = end_to_end.load_scenarios(PIPELINE_SET)
-    with closing(build_models(settings)) as models, _connect(autocommit=True) as conn:
-        services = pipeline.Services(
-            models.generator,
-            models.decision,
-            models.embedder,
-            conn,
-            settings.generation_thinking_level,
-        )
+    with closing(build_models(settings)) as models:
         scores: list[end_to_end.ScenarioScore] = []
         for index, scenario in enumerate(scenarios, start=1):
             started = time.monotonic()
-            score = end_to_end.evaluate(
-                scenario, _strict_answer(scenario.message, scenario.as_of, services), models.judge
-            )
+            # Open per-case and close before judging so slow judge retries cannot exceed Neon's
+            # ~5-minute idle SSL timeout (D63).
+            with _connect(autocommit=True) as conn:
+                services = pipeline.Services(
+                    models.generator,
+                    models.decision,
+                    models.embedder,
+                    conn,
+                    settings.generation_thinking_level,
+                )
+                reply = _strict_answer(scenario.message, scenario.as_of, services)
+            score = end_to_end.evaluate(scenario, reply, models.judge)
             scores.append(score)
             elapsed = time.monotonic() - started
             print(
@@ -237,20 +239,22 @@ def _eval_pipeline(output: Path) -> int:
 def _eval_edge(output: Path, sets: list[Path]) -> int:
     settings = get_settings()
     cases = edge_eval.load_cases(sets)
-    with closing(build_models(settings)) as models, _connect(autocommit=True) as conn:
-        services = pipeline.Services(
-            models.generator,
-            models.decision,
-            models.embedder,
-            conn,
-            settings.generation_thinking_level,
-        )
+    with closing(build_models(settings)) as models:
         scores: list[edge_eval.CaseScore] = []
         for index, case in enumerate(cases, start=1):
             started = time.monotonic()
-            score = edge_eval.evaluate(
-                case, _strict_answer(case.message, case.as_of, services), models.judge
-            )
+            # Open per-case and close before judging so slow judge retries cannot exceed Neon's
+            # ~5-minute idle SSL timeout (D63).
+            with _connect(autocommit=True) as conn:
+                services = pipeline.Services(
+                    models.generator,
+                    models.decision,
+                    models.embedder,
+                    conn,
+                    settings.generation_thinking_level,
+                )
+                reply = _strict_answer(case.message, case.as_of, services)
+            score = edge_eval.evaluate(case, reply, models.judge)
             scores.append(score)
             elapsed = time.monotonic() - started
             print(

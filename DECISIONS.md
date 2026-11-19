@@ -505,3 +505,13 @@ Owner-approved on 2026-11-19. Added `autocommit: bool = False` to `_connect()` i
 slow generator/judge calls until Neon's `idle_in_transaction_session_timeout` killed the run after
 ~36 minutes. *Tradeoff:* none for read-only queries; progress lines go to stderr so stdout stays
 clean.
+
+
+**D63. Scope eval Postgres connections per case and close before judging.**
+Owner-approved on 2026-11-19. Amends D62 for `_eval_edge` and `_eval_pipeline` in
+`src/niyam/cli.py`: `with _connect(autocommit=True) as conn:` now wraps only
+`_strict_answer(...)` inside each per-case iteration instead of spanning the whole eval loop
+and the judge step.
+*Why:* even with `autocommit=True`, Neon closes idle SSL connections after ~5 minutes, so any
+single case where `gemma-4-31b-it` retries took >300s dropped the connection and crashed the
+next case's retrieval query. *Tradeoff:* one short connection handshake per eval case.
