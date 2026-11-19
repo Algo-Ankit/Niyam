@@ -4,6 +4,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from contextlib import closing
 from dataclasses import asdict
 from datetime import UTC, date, datetime
@@ -83,7 +84,7 @@ def _index() -> int:
 
 def _search(query: str) -> int:
     settings = get_settings()
-    with closing(build_models(settings)) as models, _connect() as conn:
+    with closing(build_models(settings)) as models, _connect(autocommit=True) as conn:
         hits = store.search(conn, models.embedder, query)
     for hit in hits:
         print(f"{hit.score:.4f}  {hit.citation}  {hit.body[:90]}")
@@ -92,7 +93,7 @@ def _search(query: str) -> int:
 
 def _ask(message: str, as_of: date) -> int:
     settings = get_settings()
-    with closing(build_models(settings)) as models, _connect() as conn:
+    with closing(build_models(settings)) as models, _connect(autocommit=True) as conn:
         services = pipeline.Services(
             models.generator,
             models.decision,
@@ -109,7 +110,7 @@ def _eval_retrieval(output: Path, eval_set: Path, *, hyde: bool, rerank: bool) -
     settings = get_settings()
     items = retrieval_eval.load_items(eval_set)
     level = settings.generation_thinking_level
-    with closing(build_models(settings)) as models, _connect() as conn:
+    with closing(build_models(settings)) as models, _connect(autocommit=True) as conn:
         passage_for = (
             (lambda q: hyde_search.hypothetical_passage(models.generator, q, level))
             if hyde
@@ -197,7 +198,7 @@ def _eval_answers(output: Path) -> int:
 def _eval_pipeline(output: Path) -> int:
     settings = get_settings()
     scenarios = end_to_end.load_scenarios(PIPELINE_SET)
-    with closing(build_models(settings)) as models, _connect() as conn:
+    with closing(build_models(settings)) as models, _connect(autocommit=True) as conn:
         services = pipeline.Services(
             models.generator,
             models.decision,
@@ -205,10 +206,19 @@ def _eval_pipeline(output: Path) -> int:
             conn,
             settings.generation_thinking_level,
         )
-        scores = [
-            end_to_end.evaluate(s, _strict_answer(s.message, s.as_of, services), models.judge)
-            for s in scenarios
-        ]
+        scores: list[end_to_end.ScenarioScore] = []
+        for index, scenario in enumerate(scenarios, start=1):
+            started = time.monotonic()
+            score = end_to_end.evaluate(
+                scenario, _strict_answer(scenario.message, scenario.as_of, services), models.judge
+            )
+            scores.append(score)
+            elapsed = time.monotonic() - started
+            print(
+                f"[{index}/{len(scenarios)}] {scenario.id} ({elapsed:.1f}s)",
+                file=sys.stderr,
+                flush=True,
+            )
     totals = end_to_end.summary(scores)
     _save(
         output,
@@ -227,7 +237,7 @@ def _eval_pipeline(output: Path) -> int:
 def _eval_edge(output: Path, sets: list[Path]) -> int:
     settings = get_settings()
     cases = edge_eval.load_cases(sets)
-    with closing(build_models(settings)) as models, _connect() as conn:
+    with closing(build_models(settings)) as models, _connect(autocommit=True) as conn:
         services = pipeline.Services(
             models.generator,
             models.decision,
@@ -235,10 +245,20 @@ def _eval_edge(output: Path, sets: list[Path]) -> int:
             conn,
             settings.generation_thinking_level,
         )
-        scores = [
-            edge_eval.evaluate(c, _strict_answer(c.message, c.as_of, services), models.judge)
-            for c in cases
-        ]
+        scores: list[edge_eval.CaseScore] = []
+        for index, case in enumerate(cases, start=1):
+            started = time.monotonic()
+            score = edge_eval.evaluate(
+                case, _strict_answer(case.message, case.as_of, services), models.judge
+            )
+            scores.append(score)
+            elapsed = time.monotonic() - started
+            print(
+                f"[{index}/{len(cases)}] {case.id} passed={score.passed} "
+                f"judge_failed={score.judge_failed} ({elapsed:.1f}s)",
+                file=sys.stderr,
+                flush=True,
+            )
     totals = edge_eval.summary(scores)
     _save(
         output,
@@ -295,8 +315,12 @@ def _commit() -> str:
     return result.stdout.strip()
 
 
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(get_settings().database_url.get_secret_value(), connect_timeout=20)
+def _connect(*, autocommit: bool = False) -> psycopg.Connection:
+    return psycopg.connect(
+        get_settings().database_url.get_secret_value(),
+        connect_timeout=20,
+        autocommit=autocommit,
+    )
 
 
 def main() -> None:

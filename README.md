@@ -14,9 +14,10 @@ code checks the model's output before anyone sees it.
 
 > Information from 8 CFR 214.2(f), not legal advice. Confirm deadlines with your DSO.
 
-**Status:** in development. The assistant runs from the command line. Retrieval has been
-evaluated. Answer-quality and whole-pipeline evaluations are built but have not been run yet.
-There is no web app or public demo yet.
+**Status:** in development. The assistant runs from the command line. Retrieval (with
+reranking), fact extraction, and the first independent decline/security evaluation (R10) have
+been measured. The remaining edge/H-1B/pipeline evaluations, prompt iterations, and web app
+are next. There is no public demo yet.
 
 ---
 
@@ -57,8 +58,8 @@ The output always has the same shape:
   [2] Rules engine (pure Python)  -> findings: deadlines, day counts, obligations
         |                            plus stated assumptions and missing facts
         v
-  [3] Retrieve provisions: vector search over 8 CFR 214.2(f) (pgvector, k = 5)
-        plus the paragraphs the findings cite
+  [3] Retrieve & rerank provisions: vector search over 8 CFR 214.2(f) (pgvector),
+      reranked by gemini-decision-1 (top 10), plus the paragraphs the findings cite
         |
         v
   [4] Explain (generator), using only the given provisions
@@ -115,9 +116,41 @@ gets equal weight and pushes good results down (R4). Vector search is therefore 
 arm (D47). Adding HyDE raised hit@5 on the test split by +0.057, but the 95% paired-bootstrap
 interval was [0.000, +0.143], so the gain is not established (R7, R8).
 
+**Retrieval — dev split with reranking** (60 questions, R9)
+
+| Arm | hit@1 | hit@3 | hit@5 | MRR@10 | Source |
+|---|---|---|---|---|---|
+| Vector (`gemini-embedding-2`, 768-d) | 0.900 | 0.967 | 0.967 | 0.936 | R9 |
+| **Vector + Rerank (`gemini-decision-1`, top 10)** | **0.983** | **1.000** | **1.000** | **0.989** | R9 |
+
+Adding `gemini-decision-1` reranking over the top 10 vector candidates raised dev `hit@1` by
+`+0.083 [+0.000, +0.183]` and `MRR@10` by `+0.053 [+0.000, +0.112]` (paired 95% bootstrap,
+2,000 resamples; 6 rank-1 misses fixed, 1 broken, 1 still wrong).
+
 **Fact extraction** (15 messages): all fields correct on 14 of 15 (R5). One prompt fix later,
 all 15 were correct (R6). R6 is optimistic, because the fix was made after reading the R5 miss
 on the same set and there is no held-out extraction set yet.
+
+**Decline & security baseline** (`evals/independent/decline_and_security.jsonl`, 40 cases, R10)
+
+| Group | Cases | `judge_failed` | `passed` |
+|---|---:|---:|---:|
+| **All** | **40** | **1** | **0.513** |
+| `category:out_of_scope` | 15 | 0 | 0.467 |
+| `category:partly_answerable` | 8 | 0 | 0.75 |
+| `category:security_guardrails` | 17 | 1 | 0.438 |
+| `confidence:high` | 32 | 1 | 0.484 |
+| `confidence:medium` | 8 | 0 | 0.625 |
+| `unambiguous` | 38 | 1 | 0.541 |
+| `ambiguous` | 2 | 0 | 0.0 |
+
+Overall sub-metrics (R10, 39 scored cases; `y031` judge-failed): `no_leak = 1.0`,
+`avoids_forbidden = 1.0`, `asks_ok = 1.0`, `scope_ok = 0.9`, `deadlines_ok = 0.769`,
+`cites_gold = 0.75`, `counts_ok = 0.6`, `says_required = 0.538`. Hard safety invariants held
+across every scored case (zero leaks, zero prohibited claims, 1.0 `scope_ok` on out-of-scope
+prompts). Most failures are completeness gaps (`says_required`), primarily out-of-scope declines
+that omitted expected referral details or adversarial prompts that dropped citations/counts.
+This run is frozen as the R10 baseline before prompt/model iteration.
 
 ## Quick start
 
@@ -144,10 +177,11 @@ elsewhere.
 | `search QUERY` | Search the indexed provisions |
 | `corpus-fetch` / `corpus-build` | Download the eCFR XML / parse 8 CFR 214.2(f) |
 | `index` | Embed the processed corpus and load it into Postgres |
-| `eval-retrieval OUT [--set FILE] [--hyde]` | Score the retrieval arms |
+| `eval-retrieval OUT [--set FILE] [--hyde] [--rerank]` | Score the retrieval arms |
 | `eval-extraction OUT` | Score fact extraction end to end |
 | `eval-answers OUT` | Score answers given the gold provisions (judge: Gemma) |
 | `eval-pipeline OUT` | Score the whole assistant on in-scope and out-of-scope scenarios |
+| `eval-edge OUT [--set FILE]` | Score full replies on independent edge, H-1B, and decline/security sets |
 | `verify-providers` | Make one live call to each provider |
 
 ### Development
@@ -205,9 +239,11 @@ RESULTS.md            append-only measurement log (R1, R2, ...)
 - [x] Provider verification, model layer, cache, rate limiter, spend ledger
 - [x] Corpus: parse and index 8 CFR 214.2(f)
 - [x] Rules engine for OPT and STEM OPT deadlines
-- [x] Retrieval evaluation (keyword, vector, hybrid, HyDE)
+- [x] Retrieval evaluation (keyword, vector, hybrid, HyDE, reranking)
 - [x] `niyam ask` pipeline with code-checked output
-- [ ] Run the answer-quality and whole-pipeline evals and calibrate the judge
+- [x] Independent decline & security baseline evaluation (R10)
+- [ ] Run remaining independent/pipeline evals and calibrate the judge
+- [ ] Improve decline/referral completeness and adversarial citation retention over R10
 - [ ] Web app, Langfuse tracing and online evaluation
 - [ ] CI regression gate and a public deployment
 

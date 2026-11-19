@@ -494,3 +494,14 @@ from `in`/`partial` rows, aligned `h049` with D53, and added `any_deadline: true
 `h032`, `h036`, and `h061`.
 *Why:* per D57, H-1B rules outside 8 CFR 214.2(f) cap-gap must be declined rather than answered.
 *Tradeoff:* the 53 rewritten cases now test refusal/referral quality rather than H-1B rule recall.
+
+**D62. Open read-only CLI and eval Postgres connections in autocommit mode and log eval progress.**
+Owner-approved on 2026-11-19. Added `autocommit: bool = False` to `_connect()` in
+`src/niyam/cli.py` and passed `autocommit=True` from read-only commands (`eval-edge`,
+`eval-pipeline`, `eval-retrieval`, `search`, `ask`) while keeping `index` transactional
+(`autocommit=False`). Also added per-case stderr progress lines (`[i/N] <id> ...`) to
+`eval-edge` and `eval-pipeline`.
+*Why:* without autocommit, the first retrieval query opened a transaction that stayed idle across
+slow generator/judge calls until Neon's `idle_in_transaction_session_timeout` killed the run after
+~36 minutes. *Tradeoff:* none for read-only queries; progress lines go to stderr so stdout stays
+clean.

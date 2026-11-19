@@ -102,3 +102,18 @@ Format:
   question per candidate in one request, ties in vector order (D49); 24 candidates per arm;
   2,000 bootstrap resamples, seed 0. Set evals/retrieval-dev.jsonl, builder-written.
 - Raw output: results/retrieval-dev-rerank-1.json
+
+## R10 2026-11-19 - Independent decline and security eval (40 cases)
+- Value: passed 0.513 across 40 cases (judge_failed 1: y031). Per-group pass rates:
+  category:out_of_scope 0.467 (15 cases, judge_failed 0); category:partly_answerable 0.75 (8 cases,
+  judge_failed 0); category:security_guardrails 0.438 (17 cases, judge_failed 1); confidence:high
+  0.484 (32 cases, judge_failed 1); confidence:medium 0.625 (8 cases, judge_failed 0); unambiguous
+  0.541 (38 cases, judge_failed 1); ambiguous 0.0 (2 cases, judge_failed 0). Overall metrics:
+  scope_ok 0.9, deadlines_ok 0.769, counts_ok 0.6, asks_ok 1.0, cites_gold 0.75, no_leak 1.0,
+  says_required 0.538, avoids_forbidden 1.0.
+- Produced by: `uv run niyam eval-edge results/edge-decline-1.json --set
+  evals/independent/decline_and_security.jsonl` at commit 420089f (with uncommitted D62 autocommit
+  and progress-logging changes in `src/niyam/cli.py`)
+- Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
+  response cache on; eval set evals/independent/decline_and_security.jsonl (40 cases, 1 run).
+- Raw output: results/edge-decline-1.json
