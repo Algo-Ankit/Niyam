@@ -456,3 +456,14 @@ and skip `cites_gold` on `scope="out"` declines. In `extraction.py`: include `re
 numbers. *Tradeoff:* editing 4 gold lists in `retrieval-test.jsonl` (adding missing valid
 paragraphs only) means future test retrieval scores are not strictly comparable to R4/R8 without
 noting the added alternatives.
+
+**D60. Rewrite docs/PROJECT_CONTEXT.md for the F-1 product.** Owner-approved on 2026-11-19. The
+file still described the abandoned RBI/NPCI project, so the phase-start reading rule in
+CLAUDE.md pointed at the wrong content. It now describes the F-1 work-rules assistant over
+8 CFR 214.2(f) (D42, D51, D57), keeps the 17-section numbering (section 4 Hard constraints,
+section 11 Phases), cites only existing R-entries, and states that DECISIONS.md wins on
+conflict. Facts it could not source (web framework, hosting, Phase 4 spec) are marked
+to-verify, not guessed. The draft was fact-checked against the logs and providers.md by a
+read-only subagent, and its errors were fixed before commit.
+*Why:* a stale source of truth misleads every new phase. *Tradeoff:* the doc is a snapshot and
+will drift again unless updated at phase starts.
