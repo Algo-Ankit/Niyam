@@ -117,3 +117,22 @@ Format:
 - Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
   response cache on; eval set evals/independent/decline_and_security.jsonl (40 cases, 1 run).
 - Raw output: results/edge-decline-1.json
+
+## R11 2026-11-19 - Independent H-1B scope and cap-gap eval (70 cases)
+- Value: passed 0.493 across 70 cases (judge_failed 1: h070). Per-group pass rates:
+  category:cap_exemptions 0.571 (7 cases, judge_failed 0); category:cap_gap 0.0 (9 cases,
+  judge_failed 0); category:cos_vs_consular 0.5 (2 cases, judge_failed 0); category:dates 0.692
+  (13 cases, judge_failed 0); category:denial_withdrawal 0.6 (5 cases, judge_failed 0);
+  category:grace_period 0.2 (5 cases, judge_failed 0); category:messy_input 0.0 (3 cases,
+  judge_failed 0); category:out_of_scope 0.714 (8 cases, judge_failed 1); category:portability
+  0.25 (4 cases, judge_failed 0); category:registration_selection 0.9 (10 cases, judge_failed 0);
+  category:specialty_occupation 0.25 (4 cases, judge_failed 0); confidence:high 0.567 (61 cases,
+  judge_failed 1); confidence:medium 0.0 (7 cases, judge_failed 0); confidence:low 0.0 (2 cases,
+  judge_failed 0); unambiguous 0.507 (68 cases, judge_failed 1); ambiguous 0.0 (2 cases,
+  judge_failed 0). Overall metrics: scope_ok 0.814, deadlines_ok 0.556, counts_ok 0, asks_ok 1.0,
+  cites_gold 0.765, no_leak 1.0, says_required 0.551, avoids_forbidden 0.971.
+- Produced by: `uv run niyam eval-edge results/edge-h1b-1.json --set
+  evals/independent/h1b_cases.jsonl` at commit 8bfb014
+- Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
+  response cache on; eval set evals/independent/h1b_cases.jsonl (70 cases, 1 run).
+- Raw output: results/edge-h1b-1.json
