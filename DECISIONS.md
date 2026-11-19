@@ -467,3 +467,30 @@ to-verify, not guessed. The draft was fact-checked against the logs and provider
 read-only subagent, and its errors were fixed before commit.
 *Why:* a stale source of truth misleads every new phase. *Tradeoff:* the doc is a snapshot and
 will drift again unless updated at phase starts.
+
+**D60b. Separate retrieval `gold` from answer-eval `context` and fix remaining D59 audit findings.**
+Owner-approved on 2026-11-19. Amends D59 for `d22`, `d26`, `d34`, `x054`, `p24`, and `y031`:
+(1) `AnswerItem` in `src/niyam/evals/answers.py` now reads an optional `context` list so
+`eval-answers` receives parent/child provisions (`d22`: `(C)(10)`, `d26`: `(f)(4)(i)-(ii)`,
+`d34`: `(f)(5)(vii)(A)(1)-(3)`) while `eval-retrieval` keeps strict single-rule `gold` (no bare
+fragments satisfying any-of `hit@k`); (2) removed bare fragments `(A)(1)-(3)` from `x054`
+`gold_paragraphs`; (3) added `8 CFR 214.2(f)(17)` alongside `(f)(12)(ii)(A)` on `p24`;
+(4) rephrased `"E-Verify number"` in `y031` `must_not_say` to
+`"Provides a fabricated E-Verify number"` so safe refusals quoting `(f)(10)(ii)(C)(5)` do not
+trip the rubric judge.
+*Why:* putting lead-in stems or child fragments in retrieval `gold` inflates any-of `hit@k`,
+whereas omitting them from `eval-answers` hides facts the reference answer requires. *Tradeoff:*
+one extra optional field in `retrieval-dev.jsonl`.
+
+**D61. Align `evals/independent/h1b_cases.jsonl` gold labels with D57 scope (8 CFR 214.2(f) only).**
+Owner-approved on 2026-11-19. Reclassified the 70 independent H-1B cases from 55 `in` / 9 `partial`
+/ 6 `out` to 11 `in` (`h031`–`h038`, `h044`, `h049`, `h061`), 6 `partial` (`h018`, `h024`, `h039`,
+`h058`, `h060`, `h062`), and 53 `out` (all `214.2(h)` / non-corpus cases plus cleaned-up existing
+`out` rows). Rewritten `out` rows follow `decline_and_security.jsonl` conventions (empty
+`gold_paragraphs`, `expected_deadlines`, `expected_counts`; polite decline + referral in
+`must_say`; no substantive `214.2(h)` claims in `must_not_say`; `forbidden_literals` kept on
+prompt-injection case `h068`). Stripped non-corpus citations (`214.2(h)`, `214.1(m)(1)`, `248.1`)
+from `in`/`partial` rows, aligned `h049` with D53, and added `any_deadline: true` on `h031`,
+`h032`, `h036`, and `h061`.
+*Why:* per D57, H-1B rules outside 8 CFR 214.2(f) cap-gap must be declined rather than answered.
+*Tradeoff:* the 53 rewritten cases now test refusal/referral quality rather than H-1B rule recall.

@@ -24,6 +24,7 @@ class AnswerItem:
     question: str
     gold: tuple[str, ...]
     reference: str
+    context: tuple[str, ...] = ()  # extra parent/child provisions needed for answer grounding only
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,13 @@ def load_items(path: Path) -> list[AnswerItem]:
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip() and "reference" in (row := json.loads(line)):
             items.append(
-                AnswerItem(row["id"], row["question"], tuple(row["gold"]), row["reference"])
+                AnswerItem(
+                    row["id"],
+                    row["question"],
+                    tuple(row["gold"]),
+                    row["reference"],
+                    tuple(row.get("context", ())),
+                )
             )
     return items
 
@@ -66,7 +73,8 @@ def evaluate(
     judge_model: GenerativeModel,
     thinking_level: ThinkingLevel | None,
 ) -> AnswerScore:
-    provisions = tuple(hits[c] for c in item.gold)
+    citations = dict.fromkeys((*item.gold, *item.context))
+    provisions = tuple(hits[c] for c in citations)
     explanation = explain(item.question, _NO_FINDINGS, provisions, generator, thinking_level)
     rejected = check_explanation(explanation, _NO_FINDINGS, provisions)
     verdict = judge(

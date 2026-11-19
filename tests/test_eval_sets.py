@@ -63,6 +63,10 @@ def test_answer_set_is_the_40_dev_questions_with_references() -> None:
     items = answers.load_items(_ROOT / "evals/retrieval-dev.jsonl")
     assert len(items) == 40
     assert all(i.reference for i in items)
+    assert not {c for i in items for c in i.context} - _indexed()
+    by_id = {i.id: i for i in items}
+    assert by_id["d26"].gold == ("8 CFR 214.2(f)(4)",)
+    assert by_id["d26"].context == ("8 CFR 214.2(f)(4)(i)", "8 CFR 214.2(f)(4)(ii)")
 
 
 def test_pipeline_set_mix_and_gold_paragraphs() -> None:
