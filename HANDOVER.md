@@ -1,28 +1,31 @@
 ## Goal & Git state
 Goal: F-1 student work-rules assistant (OPT, STEM OPT, H-1B cap-gap) over 8 CFR 214.2(f), with evals and monitoring (D42).
-Branch main, last commit 253cd0c "Add the independent eval sets for eval-edge (D54)", pushed. Untracked: results/edge-1.log (empty, from a failed 16-Nov run), results/edge-decline-1.log (run in progress).
+Branch main, last commit 1384b61 "Retry malformed judge output and keep eval-edge going on judge failure (D56, D57)", pushed. Untracked: results/edge-1.log, results/edge-decline-1.log (logs of crashed runs, no scores).
 
 ## Done & Verified
-- Previous handover (D39, US payments scope) was 15 decisions stale; state rebuilt from DECISIONS.md, RESULTS.md and git. Repo is at D54 / R9.
-- Committed the 200 independent eval cases in evals/independent/ (90 edge, 70 H-1B, 40 decline/security). Verified: pre-commit hook passed ruff, format, mypy, pytest (108 passed); pushed.
-- Started `uv run niyam eval-edge results/edge-decline-1.json --set evals/independent/decline_and_security.jsonl` in the background. Unverified: not finished at handover time.
-- Local ledger shows all logged calls at $0.00, DECISION_BUDGET_USD is 0, and no calls on 2026-11-19 before this run. The 16-Nov edge attempt made 20 generator and 9 judge calls, then died with no report.
+- D55: 429 and any 5xx from Gemini retried 3 times (2/4/8 s), every attempt recorded in the ledger; Interactions API errors (google.genai._gaos compat_errors) are now translated. Verified: full suite, 114 passed at 321ec31.
+- D56: judges retry malformed output (3 tries); eval-edge marks a case judge_failed, leaves it out of pass rates and counts it; meter records unusable responses. Verified: full suite, 117 passed at 1384b61.
+- D57: corpus stays 214.2(f); 214.2(h) not added. Measured from data/raw: (h) 583 XML paragraphs vs 181 for (f); parser refuses (h) because "(i)" is both a letter and a roman label.
+- Gold review page published (private): https://claude.ai/artifact/AnwgH5vM28M6YCdCke2FS1. All 350 cases with regulation text; verdicts (ok/wrong/unsure + note) in its db collection "verdicts", owner-write only. Verified: probe write/read/delete; an interact-level write was refused. 0 verdicts so far. Builder script: scratchpad build_review.py (not in repo).
+- Unverified: no eval-edge run has finished; three decline/security attempts crashed (503, then malformed judge JSON), and the last was stopped by the owner. No R10.
+- Memory: agent roles saved (Claude principal; agy Neon = SDE3/lead, Hydrogen = SDE1; Haiku subagent = Claude's SDE1).
 
 ## Open questions
-- Owner review of the model-written gold in evals/independent/ (owner reviews, never types gold).
-- Antigravity (Gemini) role: proposed as an independent gold cross-check that sends only disagreements to the owner; caveat that it shares a model family with our decision model and judge. Not decided.
-- Make eval-edge save after each case so a crash keeps partial results? Proposed, not approved.
-- Ask CFPB / Reg Z questions from the old handover are moot after the F-1 re-scope.
+- Owner is checking and correcting bugs found in the gold sets now. Next session: see what changed in evals/ and verify each fix against the regulation.
+- The 61 H-1B cases citing 214.2(h) need relabelling to expect a decline (D57) before that set is scored.
+- Gold of the builder-written sets (retrieval dev/test, extraction, pipeline) has never had owner review.
+- results/extraction-eval-3.json exists but has no RESULTS.md entry; check before reporting it.
+- eval-answers and eval-pipeline have never been run.
 
 ## Gotchas
-- docs/PROJECT_CONTEXT.md has no F-1 or 214.2 content and still describes RBI/NPCI; CLAUDE.md calls it the source of truth. Trust DECISIONS.md over it until it is rewritten.
-- eval-edge writes its JSON only at the end; an exception loses the whole run (the response cache in .state/ replays finished calls for free).
-- Limits: generator gemini-3.5-flash-lite 500 RPD; judge gemma-4-31b-it 16K tokens/min (about 4 calls/min); decision model 10K RPD. eval-edge costs 3 to 4 requests per case (D54), so all 200 cases need more than one quota day for the generator if run together.
-- `uv` is `.tools/bootstrap/Scripts/uv.exe` on Windows. Pipe `< /dev/null` into one-off `python`/`uv run` commands in Git Bash or a stray stdin read can hang.
-- `verify-providers` makes live calls that count against quota. Deny rules block reading .env, .venv, .tools and caches.
-- Subagent and other-model output is unverified; keep subagents on Sonnet or Opus at medium effort.
+- docs/PROJECT_CONTEXT.md has no F-1 content and still describes RBI/NPCI; trust DECISIONS.md over it until it is rewritten.
+- A crashed eval loses only its report: the response cache replays finished calls free, so rerun the same command.
+- Background runs: end the command with `exit $status`, or a crash reports as success.
+- Limits: generator 500 RPD (about 2 calls per edge case); judge gemma-4-31b-it about 4 calls/min and sometimes overloaded (503) or malformed. A new API key fixes neither.
+- `uv` is `.tools/bootstrap/Scripts/uv.exe`. Pipe `< /dev/null` into one-off `uv run python` in Git Bash. Deny rules block .env, .venv, .tools.
+- The review page bakes in gold as of 253cd0c; after gold edits, rebuild cases.js and republish it to the same URL.
 
 ## Next step
-When the decline/security run ends, read the summary in results/edge-decline-1.json and append it to RESULTS.md as R10 with command and commit 253cd0c; then run the same command with --set evals/independent/edge_cases.jsonl to results/edge-cases-1.json.
+Run `git diff 1384b61 -- evals/` to see the owner's gold fixes, check each against data/processed/8-cfr-214.2-f.json, then propose a DECISIONS entry and commit, and rerun `uv run niyam eval-edge results/edge-decline-1.json --set evals/independent/decline_and_security.jsonl`.
 
-Records: DECISIONS.md latest D54, RESULTS.md latest R9.
+Records: DECISIONS.md latest D57, RESULTS.md latest R9.
