@@ -248,7 +248,7 @@ def _eval_edge(output: Path, sets: list[Path]) -> int:
         decision_model=settings.decision_model,
         judge_model=settings.judge_model,
         summary=totals,
-        scores=[asdict(s) | {"passed": s.passed} for s in scores],
+        scores=[asdict(s) | {"passed": s.passed, "judge_failed": s.judge_failed} for s in scores],
     )
     overall = totals["all"]
     print("  ".join(f"{name}={value}" for name, value in overall.items()))

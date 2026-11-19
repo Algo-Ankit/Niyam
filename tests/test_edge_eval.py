@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 from niyam.assistant.pipeline import Explanation, Extraction, Reply
 from niyam.evals import edge
-from niyam.evals.judge import RubricVerdict
+from niyam.evals.judge import JUDGE_ATTEMPTS, RubricVerdict
+from niyam.models.errors import ProviderResponseError
 from niyam.models.types import GenerationRequest, GenerationResult, Usage
 from niyam.rules.opt import Job, StudentFacts, assess
 
@@ -15,12 +16,15 @@ from niyam.rules.opt import Job, StudentFacts, assess
 class _Judge:
     model_id = "judge"
 
-    def __init__(self, ok: bool = True) -> None:
+    def __init__(self, ok: bool = True, malformed: int = 0) -> None:
         self.prompts: list[str] = []
         self._ok = ok
+        self._malformed = malformed  # how many calls return unparseable output first
 
     def generate[T: BaseModel](self, request: GenerationRequest[T]) -> GenerationResult[T]:
         self.prompts.append(request.prompt)
+        if len(self.prompts) <= self._malformed:
+            raise ProviderResponseError("judge: output does not match RubricVerdict")
         verdict = RubricVerdict(says_required=self._ok, avoids_forbidden=self._ok, reason="r")
         return GenerationResult(request.schema.model_validate(verdict.model_dump()), Usage(0))
 
@@ -125,6 +129,23 @@ def test_summary_groups_by_category_and_skips_checks_that_do_not_apply(tmp_path:
     assert totals["category:unemployment_counting"]["cases"] == 1
     assert totals["all"]["passed"] == 0.0
     assert totals["all"]["deadlines_ok"] == 0  # no case had deadlines
+
+
+def test_malformed_judge_output_is_retried(tmp_path: Path) -> None:
+    case = _case(tmp_path)
+    judge = _Judge(malformed=JUDGE_ATTEMPTS - 1)
+    score = edge.evaluate(case, _reply(_ON_OPT, case.as_of), judge)
+    assert (len(judge.prompts), score.passed) == (JUDGE_ATTEMPTS, True)
+
+
+def test_a_judge_that_never_parses_is_reported_and_left_out_of_pass_rates(tmp_path: Path) -> None:
+    case = _case(tmp_path)
+    failed = edge.evaluate(case, _reply(_ON_OPT, case.as_of), _Judge(malformed=JUDGE_ATTEMPTS))
+    passed = edge.evaluate(case, _reply(_ON_OPT, case.as_of), _Judge())
+    assert (failed.judge_failed, failed.passed) == (True, None)
+    assert failed.judge_reason.startswith("judge failed:")
+    totals = edge.summary([failed, passed])["all"]
+    assert (totals["cases"], totals["judge_failed"], totals["passed"]) == (2, 1, 1.0)
 
 
 def test_unknown_scope_is_rejected(tmp_path: Path) -> None:

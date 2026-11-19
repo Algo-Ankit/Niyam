@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from niyam.config import RateLimits
 from niyam.models.errors import (
     BudgetExceededError,
+    ProviderResponseError,
     ProviderUnavailableError,
     QuotaExhaustedError,
     RateLimitedError,
@@ -95,6 +96,10 @@ class Meter:
                     error.retry_after_seconds if isinstance(error, RateLimitedError) else None
                 )
                 self._sleep(retry_after or BACKOFF_BASE_SECONDS * 2**attempt)
+            except ProviderResponseError:
+                # The provider answered, so the request counts even though its output was unusable.
+                self._ledger.record(self.provider, self.model_id, Usage(), 0.0, requests)
+                raise
             else:
                 usage = usage_of(result)
                 cost = usage.input_tokens * self._price

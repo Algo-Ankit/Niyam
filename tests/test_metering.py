@@ -7,6 +7,7 @@ from fakes import FakeDecisionModel, FakeEmbedder
 from niyam.config import RateLimits
 from niyam.models.errors import (
     BudgetExceededError,
+    ProviderResponseError,
     ProviderUnavailableError,
     QuotaExhaustedError,
     RateLimitedError,
@@ -95,6 +96,16 @@ def test_unavailable_provider_gives_up_after_the_last_retry(ledger: CostLedger) 
         meter.run(1, overloaded, lambda _: Usage())
     assert slept == [2.0, 4.0, 8.0]
     assert ledger.requests_today("m") == 4
+
+
+def test_unusable_output_counts_as_a_request_and_is_not_retried_here(ledger: CostLedger) -> None:
+    def malformed() -> str:
+        raise ProviderResponseError("bad json")
+
+    meter, slept = make_meter(ledger, max_retries=3)
+    with pytest.raises(ProviderResponseError):
+        meter.run(1, malformed, lambda _: Usage())
+    assert (slept, ledger.requests_today("m")) == ([], 1)
 
 
 def test_retry_after_from_provider_is_honoured(ledger: CostLedger) -> None:

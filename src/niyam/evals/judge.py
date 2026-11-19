@@ -6,8 +6,11 @@ uncalibrated until the owner labels a sample and agreement is measured.
 
 from pydantic import BaseModel, Field
 
+from niyam.models.errors import ProviderResponseError
 from niyam.models.interfaces import GenerativeModel
 from niyam.models.types import GenerationRequest
+
+JUDGE_ATTEMPTS = 3  # the first try plus two retries when the output is malformed (D56)
 
 
 class Verdict(BaseModel):
@@ -38,7 +41,7 @@ def judge(  # noqa: PLR0913 (each argument is one part of the judged case)
         f"Computed findings given to the assistant:\n{findings or '(none)'}\n\n"
         f"Provisions given to the assistant:\n{provisions}"
     )
-    return model.generate(GenerationRequest(prompt, Verdict, thinking_level=None)).output
+    return _verdict(model, prompt, Verdict)
 
 
 class RubricVerdict(BaseModel):
@@ -63,4 +66,17 @@ def judge_rubric(
         f"Required points (all must be conveyed):\n{must_say or '(none)'}\n\n"
         f"Forbidden claims (none may appear):\n{must_not_say or '(none)'}"
     )
-    return model.generate(GenerationRequest(prompt, RubricVerdict, thinking_level=None)).output
+    return _verdict(model, prompt, RubricVerdict)
+
+
+# NOTE: gemma-4-31b-it sometimes returns JSON that does not parse (seen 2026-11-19). Only parsed
+# outputs are cached, so each retry is a fresh request.
+def _verdict[V: BaseModel](model: GenerativeModel, prompt: str, schema: type[V]) -> V:
+    """The judge's verdict, retrying malformed output; raises after JUDGE_ATTEMPTS tries."""
+    for attempt in range(JUDGE_ATTEMPTS):
+        try:
+            return model.generate(GenerationRequest(prompt, schema, thinking_level=None)).output
+        except ProviderResponseError:
+            if attempt == JUDGE_ATTEMPTS - 1:
+                raise
+    raise AssertionError("unreachable: the loop returns or raises")

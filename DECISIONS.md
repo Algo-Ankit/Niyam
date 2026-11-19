@@ -402,3 +402,23 @@ rejected attempt is recorded in the ledger as a request, because the page does n
 whether failed requests count against quota.
 *Why:* long eval runs on free-tier models die on short provider spikes. *Tradeoff:* a run can
 wait about 14 seconds per failing call; the ledger may over-count requests on bad days.
+
+**D56. Retry malformed judge output twice, then report the case as a judge failure.**
+Owner-approved on 2026-11-19. With D55 in place, eval-edge stopped again at about case 9:
+gemma-4-31b-it returned JSON that did not parse as RubricVerdict. Both judges (answer and
+rubric) now try up to 3 times; only parsed outputs are cached, so each retry is a fresh request,
+and the meter now records an unusable response as a request. If all 3 tries fail, eval-edge
+keeps going: the case gets judge_failed, is left out of every pass rate, and the summary counts
+judge failures per group.
+*Why:* one malformed judge reply should not throw away a whole run. *Tradeoff:* a judge
+failure is not a fail, so a judge that fails often could flatter the pass rate; the count is
+reported next to it, and frequent failures mean replacing the judge.
+
+**D57. The corpus stays 8 CFR 214.2(f); 214.2(h) is not added.** Owner-approved on 2026-11-19.
+Reaffirms D51 after weighing expansion: 214.2(h) is about 3 times the text of (f) (583 vs 181
+XML paragraphs) and the parser cannot yet tell paragraph (i) from roman (i). The independent
+H-1B set cites 214.2(h) in 61 of its 70 cases and expects full answers there, which our scope
+declines. It is not scored until the owner has marked those cases on the gold review page and
+their gold is rewritten to expect a decline.
+*Why:* a narrow assistant that knows its limits is more reliable than a broad one that
+guesses. *Tradeoff:* H-1B questions beyond cap-gap get a referral, not an answer.

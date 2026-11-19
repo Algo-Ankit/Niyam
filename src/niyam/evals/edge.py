@@ -17,6 +17,7 @@ from typing import Literal
 
 from niyam.assistant.pipeline import Reply, render
 from niyam.evals.judge import judge_rubric
+from niyam.models.errors import ProviderResponseError
 from niyam.models.interfaces import GenerativeModel
 
 Scope = Literal["in", "partial", "out"]
@@ -55,16 +56,23 @@ class CaseScore:
     asks_ok: bool | None
     cites_gold: bool | None
     no_leak: bool
-    says_required: bool
-    avoids_forbidden: bool
+    says_required: bool | None  # None when the judge failed on every attempt (D56)
+    avoids_forbidden: bool | None
     judge_reason: str
     reply: str
 
     @property
-    def passed(self) -> bool:
+    def judge_failed(self) -> bool:
+        return self.says_required is None
+
+    @property
+    def passed(self) -> bool | None:
+        """None when the judge failed, so the case is left out of pass rates, not failed."""
+        if self.judge_failed:
+            return None
         checks = (self.deadlines_ok, self.counts_ok, self.asks_ok, self.cites_gold)
         exact = self.scope_ok and self.no_leak and all(c is not False for c in checks)
-        return exact and self.says_required and self.avoids_forbidden
+        return exact and bool(self.says_required) and bool(self.avoids_forbidden)
 
 
 def load_cases(paths: Iterable[Path]) -> list[Case]:
@@ -86,13 +94,17 @@ def evaluate(case: Case, reply: Reply, judge_model: GenerativeModel) -> CaseScor
     cited = {f.citation for f in findings}
     if shown:
         cited |= set(reply.explanation.citations)
-    verdict = judge_rubric(
-        judge_model,
-        message=case.message,
-        reply=text,
-        must_say=_bullets(case.must_say),
-        must_not_say=_bullets(case.must_not_say),
-    )
+    try:
+        verdict = judge_rubric(
+            judge_model,
+            message=case.message,
+            reply=text,
+            must_say=_bullets(case.must_say),
+            must_not_say=_bullets(case.must_not_say),
+        )
+        says, avoids, reason = verdict.says_required, verdict.avoids_forbidden, verdict.reason
+    except ProviderResponseError as error:
+        says, avoids, reason = None, None, f"judge failed: {error}"
     return CaseScore(
         case.id,
         case.category,
@@ -106,9 +118,9 @@ def evaluate(case: Case, reply: Reply, judge_model: GenerativeModel) -> CaseScor
         bool(cited & set(case.gold_paragraphs)) if case.gold_paragraphs else None,
         case.category != _SECURITY
         or not any(phrase.lower() in text.lower() for phrase in case.must_not_say),
-        verdict.says_required,
-        verdict.avoids_forbidden,
-        verdict.reason,
+        says,
+        avoids,
+        reason,
         text,
     )
 
@@ -131,6 +143,7 @@ def _rates(scores: list[CaseScore]) -> dict[str, float | int]:
 
     return {
         "cases": len(scores),
+        "judge_failed": sum(s.judge_failed for s in scores),
         "passed": rate(s.passed for s in scores),
         "scope_ok": rate(s.scope_ok for s in scores),
         "deadlines_ok": rate(s.deadlines_ok for s in scores),
