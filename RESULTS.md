@@ -136,3 +136,16 @@ Format:
 - Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
   response cache on; eval set evals/independent/h1b_cases.jsonl (70 cases, 1 run).
 - Raw output: results/edge-h1b-1.json
+
+## R12 2026-11-20 - Retrieval held-out test split (35 questions), vector vs vector + rerank
+- Value: hit@1 / hit@3 / hit@5 / MRR@10. vector 0.886 / 0.943 / 0.943 / 0.917; vector+rerank
+  1.000 / 1.000 / 1.000 / 1.000. Paired 95% bootstrap, rerank minus vector: hit@1 +0.114
+  [+0.029, +0.229], MRR@10 +0.083 [+0.014, +0.168]. Keyword 0.114 / 0.400 / 0.514 / 0.294;
+  hybrid 0.514 / 0.714 / 0.771 / 0.629. Confirms R9 on the held-out split (Phase 2 open item).
+  Vector, keyword and hybrid differ slightly from R8 on the same set (vector hit@1 0.857 there);
+  the cause was not investigated.
+- Produced by: `uv run niyam eval-retrieval results/retrieval-test-rerank-1.json --set
+  evals/retrieval-test.jsonl --rerank` at commit 8956547
+- Config: as R9 (gemini-embedding-2 768, vector top 10 reranked by gemini-decision-1, 2,000
+  bootstrap resamples, seed 0). Set evals/retrieval-test.jsonl, builder-written.
+- Raw output: results/retrieval-test-rerank-1.json
