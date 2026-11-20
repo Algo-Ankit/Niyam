@@ -531,3 +531,14 @@ internal error (details only in server logs); CORS origins come from `CORS_ORIGI
 exhaust the quota; streaming lets the page animate real pipeline progress instead of a timer.
 *Tradeoff:* limits are in-process memory, so they reset on restart and assume one instance;
 client IP is only correct behind a proxy if uvicorn runs with `--proxy-headers` (set in 4d).
+
+**D65. Deploy publicly before the remaining evals finish; build Phase 4 in parallel.**
+Owner-approved on 2026-11-20. Amends the Phase 4 gate in `docs/PROJECT_CONTEXT.md` section 11:
+the app may go live on a public URL while `eval-edge` (edge_cases), `eval-pipeline` and
+`eval-answers` are still running or unrun; the README states which results are pending. 4b
+(website), 4c (Langfuse) and 4d (deploy prep) run in parallel sessions; their decisions take
+D66 (4b), D67 (4c) and D68 (4d) so the numbering does not collide.
+*Why:* nothing in the app depends on eval results, the project has no real users yet, and the
+evals are bound by free-tier judge speed and generator quota. *Tradeoff:* the public page may
+show an assistant whose measured scores are incomplete; the disclaimer and the daily cap
+(D64) still apply, and public traffic shares the generator quota with the evals.
