@@ -5,7 +5,8 @@ import hashlib
 import json
 import urllib.request
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 USER_AGENT = "niyam-corpus/0.1 (educational RAG project)"
@@ -45,6 +46,16 @@ def fetch(url: str, destination: Path) -> SourceRecord:
         last_modified=last_modified,
         fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
     )
+
+
+def last_modified_date(manifest: Path, url: str) -> date | None:
+    """The source's Last-Modified date from the manifest, or None if it is not recorded."""
+    if not manifest.exists():
+        return None
+    for entry in json.loads(manifest.read_text(encoding="utf-8")):
+        if entry["url"] == url and entry.get("last_modified"):
+            return parsedate_to_datetime(entry["last_modified"]).date()
+    return None
 
 
 def record(manifest: Path, entry: SourceRecord) -> None:

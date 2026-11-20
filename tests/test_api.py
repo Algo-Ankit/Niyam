@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from niyam.api import BUSY, INTERNAL, Answerer, AskLimiter, build_app
 from niyam.assistant import pipeline
+from niyam.corpus.download import ECFR_TITLE_8, last_modified_date
 from niyam.models.errors import QuotaExhaustedError
 from niyam.retrieval.store import Hit
 from niyam.rules.opt import StudentFacts, assess
@@ -153,3 +155,19 @@ def test_daily_cap_spans_clients_and_resets_at_pacific_midnight(clock: _Clock) -
     assert refusal.retry_after_seconds == 14 * 3600 + 1  # 10:00 to midnight Pacific
     clock.now += timedelta(hours=14)
     assert limiter.admit("c") is None
+
+
+def test_health_reports_the_corpus_snapshot_date() -> None:
+    app = build_app(_answering(_reply()), AskLimiter(1, 1), [ORIGIN], corpus_snapshot=AS_OF)
+    assert TestClient(app).get("/api/health").json() == {
+        "status": "ok",
+        "corpus_snapshot": "2026-11-20",
+    }
+
+
+def test_snapshot_date_comes_from_the_manifest_last_modified_header(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    entry = {"url": ECFR_TITLE_8, "last_modified": "Thu, 15 Oct 2026 21:57:06 GMT"}
+    manifest.write_text(json.dumps([entry]), encoding="utf-8")
+    assert last_modified_date(manifest, ECFR_TITLE_8) == date(2026, 10, 15)
+    assert last_modified_date(tmp_path / "missing.json", ECFR_TITLE_8) is None

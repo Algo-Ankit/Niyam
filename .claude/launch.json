@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "web", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": ".tools/bootstrap/Scripts/uv.exe",
+      "runtimeArgs": ["run", "uvicorn", "niyam.api:create_app", "--factory", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

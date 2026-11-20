@@ -542,3 +542,18 @@ D66 (4b), D67 (4c) and D68 (4d) so the numbering does not collide.
 evals are bound by free-tier judge speed and generator quota. *Tradeoff:* the public page may
 show an assistant whose measured scores are incomplete; the disclaimer and the daily cap
 (D64) still apply, and public traffic shares the generator quota with the evals.
+
+**D66. TypeScript website in `web/` with a recorded-answer replay.**
+Owner-approved on 2026-11-20 (Phase 4b under D64/D65). `web/` is Vite + React 19 + TypeScript
+(strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) with Motion for animation
+and self-hosted Fraunces/Inter fonts; no CSS framework. The page streams `POST /api/ask` and
+lights up each real pipeline stage as its event arrives, then shows the answer with clickable
+citations, a date timeline of the findings, finding cards, the facts it understood, missing
+facts, the quoted source paragraphs, the disclaimer and the corpus snapshot date (served by
+`GET /api/health` from `data/manifest.json`). "Watch a recorded answer" replays one real
+reply captured from the live pipeline (`web/src/fixtures/`), labelled as a recording, with its
+measured stage times at 4x speed. Animations respect `prefers-reduced-motion`; light and dark
+themes follow the system.
+*Why:* the replay lets visitors and development use the page without spending the shared free
+generator quota, and stays usable when the daily cap is reached. *Tradeoff:* the recorded
+reply can drift from current pipeline output; re-record it when prompts or rules change.

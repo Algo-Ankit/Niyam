@@ -23,7 +23,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from niyam.assistant import pipeline
+from niyam.cli import MANIFEST
 from niyam.config import Settings, get_settings
+from niyam.corpus.download import ECFR_TITLE_8, last_modified_date
 from niyam.models.errors import (
     BudgetExceededError,
     ProviderUnavailableError,
@@ -112,6 +114,7 @@ def create_app() -> FastAPI:
         _live_answerer(settings, models),
         AskLimiter(settings.asks_per_ip_per_hour, settings.demo_daily_cap),
         settings.cors_origins,
+        corpus_snapshot=last_modified_date(MANIFEST, ECFR_TITLE_8),
         on_shutdown=models.close,
     )
 
@@ -120,6 +123,7 @@ def build_app(
     answerer: Answerer,
     limiter: AskLimiter,
     cors_origins: list[str],
+    corpus_snapshot: date | None = None,
     on_shutdown: Callable[[], None] = lambda: None,
 ) -> FastAPI:
     @asynccontextmanager
@@ -136,8 +140,9 @@ def build_app(
     )
 
     @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> dict[str, str | None]:
+        snapshot = corpus_snapshot.isoformat() if corpus_snapshot else None
+        return {"status": "ok", "corpus_snapshot": snapshot}
 
     @app.post("/api/ask")
     def ask(body: AskRequest, request: Request) -> StreamingResponse:

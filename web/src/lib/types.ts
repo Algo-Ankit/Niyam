@@ -1,0 +1,61 @@
+// Mirrors `reply_json` and the server-sent events in `src/niyam/api.py` (D64).
+
+export const STAGES = ['extract', 'rules', 'retrieve', 'rerank', 'explain', 'verify'] as const
+export type Stage = (typeof STAGES)[number]
+
+export type Status =
+  | 'not_yet_open'
+  | 'open'
+  | 'closed'
+  | 'upcoming'
+  | 'passed'
+  | 'within_limit'
+  | 'over_limit'
+  | 'not_applicable'
+  | 'ended'
+
+export interface Finding {
+  rule: string
+  citation: string
+  summary: string
+  status: Status
+  opens: string | null
+  closes: string | null
+  assumptions: string[]
+}
+
+export interface Provision {
+  citation: string
+  headings: string[]
+  body: string
+}
+
+export interface Reply {
+  question: string
+  facts: Record<string, unknown>
+  out_of_scope: string[]
+  findings: Finding[]
+  missing: string[]
+  provisions: Provision[]
+  explanation: string | null
+  citations: string[]
+  withheld_reason: string | null
+  rerank_failed: boolean
+  disclaimer: string
+  not_covered: string
+}
+
+export type StageTimes = Partial<Record<Stage, number>>
+
+export type AskErrorKind = 'busy' | 'internal' | 'limited' | 'invalid' | 'network'
+
+export class AskError extends Error {
+  readonly kind: AskErrorKind
+  readonly retryAfterSeconds: number | null
+
+  constructor(kind: AskErrorKind, message: string, retryAfterSeconds: number | null = null) {
+    super(message)
+    this.kind = kind
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
