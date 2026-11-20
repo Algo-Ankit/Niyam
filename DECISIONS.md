@@ -578,3 +578,21 @@ if it goes down later, the SDK's own exporter logs a failure per batch (not once
 not suppress. By the docs' unit definition each answer costs 11 units (1 trace, 7
 observations, 3 scores), so 150 asks a day (the D64 cap) for 30 days is 49,500 units, just under
 the Hobby plan's 50,000; tracing evals as well would exceed it.
+
+**D68. Phase 4d deploy prep: Docker image, CI, and a recommended free host pairing.**
+Requested by the owner's Phase 4 plan (D64, D65) on 2026-11-20; the host itself stays the
+owner's open decision (`docs/PROJECT_CONTEXT.md` section 13). A two-stage `Dockerfile` installs
+the locked, non-dev dependencies with `uv` 0.13.8 on `python:3.12-slim` and runs
+`uvicorn niyam.api:create_app --factory --proxy-headers` as a non-root user; all settings come
+from environment variables and `.dockerignore` keeps `.env`, `.state`, `.tools`, data, results
+and `web/` out of the build. `FORWARDED_ALLOW_IPS` defaults to private ranges because uvicorn
+takes the left-most `X-Forwarded-For` entry when trusting `*`, which a client can spoof.
+`.github/workflows/ci.yml` runs ruff, ruff format, mypy and pytest via `scripts/bootstrap.sh`,
+plus a `web` job that is skipped until `web/package.json` exists. Recommended: API on Render
+free (Docker), website on Cloudflare Pages; runbook in `docs/deploy.md`.
+*Why:* Render free needs no card, allows outbound Postgres on 5432 and long HTTP requests;
+Hugging Face Spaces block outbound ports other than 80, 443 and 8080 (no Neon over psycopg),
+Cloud Run needs a billing account with a card, and Koyeb asks for a card and caps HTTP
+requests at 120 s. *Tradeoff:* Render free sleeps after 15 idle minutes (about a minute to
+wake) and has no persistent disk, so the response cache, quota ledger and in-memory ask limits
+reset on every restart.

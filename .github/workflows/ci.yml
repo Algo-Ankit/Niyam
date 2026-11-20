@@ -1,0 +1,64 @@
+# Checks on every push and pull request (D68). No eval gate yet: eval baselines are unfinished.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .tools/uv-cache
+            .tools/python
+          key: tools-${{ runner.os }}-${{ hashFiles('uv.lock', 'scripts/bootstrap.sh') }}
+      - name: Bootstrap the repo-local toolchain
+        run: bash scripts/bootstrap.sh
+      - name: Ruff lint
+        run: .tools/bootstrap/bin/uv run --frozen ruff check .
+      - name: Ruff format
+        run: .tools/bootstrap/bin/uv run --frozen ruff format --check .
+      - name: Mypy
+        run: .tools/bootstrap/bin/uv run --frozen mypy
+      - name: Pytest
+        run: .tools/bootstrap/bin/uv run --frozen pytest
+
+  # The website (D64, D66) is built in parallel; every step is skipped until web/package.json exists.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - id: detect
+        working-directory: .
+        run: echo "present=${{ hashFiles('web/package.json') != '' }}" >> "$GITHUB_OUTPUT"
+      - if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - if: steps.detect.outputs.present == 'true'
+        run: npm ci
+      - if: steps.detect.outputs.present == 'true'
+        run: npm run lint --if-present
+      - if: steps.detect.outputs.present == 'true'
+        run: npm run typecheck --if-present
+      - if: steps.detect.outputs.present == 'true'
+        run: npm run build

@@ -1,0 +1,23 @@
+# Only pyproject.toml, uv.lock, README.md and src/ are copied; this keeps the build context small
+# and makes sure secrets and local state never reach the image.
+.env
+.env.*
+.git
+.github
+.githooks
+.claude
+.venv
+.tools
+.state
+.pytest_cache
+.ruff_cache
+.mypy_cache
+**/__pycache__
+data
+evals
+results
+tests
+docs
+scripts
+web
+*.bak-*
