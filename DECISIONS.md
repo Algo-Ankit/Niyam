@@ -515,3 +515,19 @@ and the judge step.
 *Why:* even with `autocommit=True`, Neon closes idle SSL connections after ~5 minutes, so any
 single case where `gemma-4-31b-it` retries took >300s dropped the connection and crashed the
 next case's retrieval query. *Tradeoff:* one short connection handshake per eval case.
+
+**D64. Phase 4 plan: TypeScript web app over a hardened, streaming FastAPI endpoint.**
+Owner-approved on 2026-11-20. Phase 4 runs as 4a harden the API, 4b TypeScript frontend,
+4c Langfuse tracing, 4d deploy to free hosts, 4e README and owner gate. The frontend is
+Vite + React + TypeScript (strict) in `web/`, replacing the untracked JavaScript scaffold. 4a:
+`pipeline.answer` reports each stage (`extract`, `rules`, `retrieve`, `rerank`, `explain`,
+`verify`) with its duration through an optional callback, so the CLI and the API share one
+orchestration; `POST /api/ask` streams those stages and then the reply as server-sent events;
+requests are limited per client IP per hour and by a global per-quota-day cap
+(`DEMO_DAILY_CAP`, default 150 asks, leaving generator headroom for evals); provider quota and
+overload errors reach the browser as a generic "busy" message and any other error as a generic
+internal error (details only in server logs); CORS origins come from `CORS_ORIGINS`.
+*Why:* the free generator allows about 250 asks a day, so an unlimited public endpoint could
+exhaust the quota; streaming lets the page animate real pipeline progress instead of a timer.
+*Tradeoff:* limits are in-process memory, so they reset on restart and assume one instance;
+client IP is only correct behind a proxy if uvicorn runs with `--proxy-headers` (set in 4d).

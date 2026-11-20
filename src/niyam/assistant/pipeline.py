@@ -8,9 +8,12 @@ those; (5) code rejects any citation or date the model invented.
 
 import json
 import re
+import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal
+from typing import Literal, get_args
 
 import psycopg
 from pydantic import BaseModel, Field
@@ -37,6 +40,9 @@ NOT_COVERED = (
     "covered. Your DSO (school international student adviser) or an immigration attorney can help."
 )
 DISCLAIMER = "Information from 8 CFR 214.2(f), not legal advice. Confirm deadlines with your DSO."
+Stage = Literal["extract", "rules", "retrieve", "rerank", "explain", "verify"]
+STAGES: tuple[Stage, ...] = get_args(Stage)
+StageCallback = Callable[[Stage, int], None]  # (stage, elapsed milliseconds)
 RETRIEVAL_K = 5
 _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _DAY = r"(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?"
@@ -108,17 +114,43 @@ class Services:
     thinking_level: ThinkingLevel | None
 
 
-def answer(message: str, as_of: date, services: Services) -> Reply:
+def answer(
+    message: str, as_of: date, services: Services, on_stage: StageCallback | None = None
+) -> Reply:
+    """The full reply; `on_stage(stage, ms)` is called as each of `STAGES` finishes."""
     generator, level = services.generator, services.thinking_level
-    extraction = extract(message, as_of, generator, level)
-    assessment = assess(extraction.facts, as_of)
-    candidates = search(services.conn, services.embedder, extraction.question, rerank.CANDIDATES)
-    top, rerank_error = top_provisions(services.decider, extraction.question, candidates)
-    provisions = _with_cited(services.conn, top, assessment)
-    explanation = explain(extraction.question, assessment, provisions, generator, level)
-    given = fact_dates(extraction.facts) | {as_of.isoformat()}
-    reason = check_explanation(explanation, assessment, provisions, given)
+    stage = _StageTimer(on_stage)
+    with stage("extract"):
+        extraction = extract(message, as_of, generator, level)
+    with stage("rules"):
+        assessment = assess(extraction.facts, as_of)
+    with stage("retrieve"):
+        candidates = search(
+            services.conn, services.embedder, extraction.question, rerank.CANDIDATES
+        )
+    with stage("rerank"):
+        top, rerank_error = top_provisions(services.decider, extraction.question, candidates)
+        provisions = _with_cited(services.conn, top, assessment)
+    with stage("explain"):
+        explanation = explain(extraction.question, assessment, provisions, generator, level)
+    with stage("verify"):
+        given = fact_dates(extraction.facts) | {as_of.isoformat()}
+        reason = check_explanation(explanation, assessment, provisions, given)
     return Reply(extraction, assessment, provisions, explanation, reason, rerank_error)
+
+
+class _StageTimer:
+    """Times a block and reports it to the callback, only if the block finished."""
+
+    def __init__(self, on_stage: StageCallback | None) -> None:
+        self._on_stage = on_stage
+
+    @contextmanager
+    def __call__(self, name: Stage) -> Iterator[None]:
+        start = time.perf_counter()
+        yield
+        if self._on_stage is not None:
+            self._on_stage(name, round((time.perf_counter() - start) * 1000))
 
 
 def top_provisions(
