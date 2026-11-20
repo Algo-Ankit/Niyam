@@ -26,11 +26,12 @@ Set these on the host, never in the image. Required ones have no default in `src
 ```bash
 docker build -t niyam-api .
 docker run --rm -p 8000:8000 --env-file .env niyam-api
-curl http://localhost:8000/api/health        # {"status":"ok"}
+curl http://localhost:8000/api/health        # {"status":"ok","corpus_snapshot":"2026-10-15"}
 ```
 
 The image runs `uvicorn niyam.api:create_app --factory --host 0.0.0.0 --port $PORT --proxy-headers`
-as a non-root user. Only `pyproject.toml`, `uv.lock`, `README.md` and `src/` enter the image.
+as a non-root user. Only `pyproject.toml`, `uv.lock`, `README.md`, `src/` and `data/manifest.json`
+(the corpus snapshot date for `GET /api/health`) enter the image.
 
 ## Client IP behind the proxy
 
