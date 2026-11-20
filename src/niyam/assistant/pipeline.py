@@ -18,6 +18,7 @@ from typing import Literal, get_args
 import psycopg
 from pydantic import BaseModel, Field
 
+from niyam.assistant.tracing import NO_TRACING, Trace, Tracer
 from niyam.config import ThinkingLevel
 from niyam.models.errors import ModelError
 from niyam.models.interfaces import DecisionModel, Embedder, GenerativeModel
@@ -112,16 +113,28 @@ class Services:
     embedder: Embedder
     conn: psycopg.Connection
     thinking_level: ThinkingLevel | None
+    tracer: Tracer = NO_TRACING
 
 
 def answer(
     message: str, as_of: date, services: Services, on_stage: StageCallback | None = None
 ) -> Reply:
     """The full reply; `on_stage(stage, ms)` is called as each of `STAGES` finishes."""
+    with services.tracer.trace() as trace:
+        reply = _answer(message, as_of, services, _StageTimer(on_stage, trace))
+        trace.finish(
+            withheld=reply.rejected_reason is not None,
+            rerank_failed=reply.rerank_error is not None,
+            findings=len(reply.assessment.findings),
+        )
+    return reply
+
+
+def _answer(message: str, as_of: date, services: Services, stage: "_StageTimer") -> Reply:
     generator, level = services.generator, services.thinking_level
-    stage = _StageTimer(on_stage)
     with stage("extract"):
         extraction = extract(message, as_of, generator, level)
+    stage.trace.question(extraction.question, as_of)
     with stage("rules"):
         assessment = assess(extraction.facts, as_of)
     with stage("retrieve"):
@@ -140,15 +153,17 @@ def answer(
 
 
 class _StageTimer:
-    """Times a block and reports it to the callback, only if the block finished."""
+    """Traces and times a block; reports it to the callback only if the block finished."""
 
-    def __init__(self, on_stage: StageCallback | None) -> None:
+    def __init__(self, on_stage: StageCallback | None, trace: Trace) -> None:
         self._on_stage = on_stage
+        self.trace = trace
 
     @contextmanager
     def __call__(self, name: Stage) -> Iterator[None]:
         start = time.perf_counter()
-        yield
+        with self.trace.stage(name):
+            yield
         if self._on_stage is not None:
             self._on_stage(name, round((time.perf_counter() - start) * 1000))
 

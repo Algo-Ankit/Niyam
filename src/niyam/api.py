@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from niyam.assistant import pipeline
+from niyam.assistant.tracing import Tracer, build_tracer
 from niyam.cli import MANIFEST
 from niyam.config import Settings, get_settings
 from niyam.corpus.download import ECFR_TITLE_8, last_modified_date
@@ -111,7 +112,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     models = build_models(settings)
     return build_app(
-        _live_answerer(settings, models),
+        _live_answerer(settings, models, build_tracer(settings)),
         AskLimiter(settings.asks_per_ip_per_hour, settings.demo_daily_cap),
         settings.cors_origins,
         corpus_snapshot=last_modified_date(MANIFEST, ECFR_TITLE_8),
@@ -164,7 +165,7 @@ def build_app(
     return app
 
 
-def _live_answerer(settings: Settings, models: ModelSuite) -> Answerer:
+def _live_answerer(settings: Settings, models: ModelSuite, tracer: Tracer) -> Answerer:
     def answer(message: str, as_of: date, on_stage: pipeline.StageCallback) -> pipeline.Reply:
         # A connection per ask, closed before the stream ends: Neon drops idle ones (D63).
         with psycopg.connect(
@@ -176,6 +177,7 @@ def _live_answerer(settings: Settings, models: ModelSuite) -> Answerer:
                 models.embedder,
                 conn,
                 settings.generation_thinking_level,
+                tracer,
             )
             return pipeline.answer(message, as_of, services, on_stage)
 

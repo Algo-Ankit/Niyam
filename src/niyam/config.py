@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     langfuse_public_key: SecretStr
     langfuse_secret_key: SecretStr
     langfuse_host: str = "https://cloud.langfuse.com"
+    langfuse_tracing: bool = True  # traces `niyam ask` and the web API; evals never trace (D67)
     database_url: SecretStr
 
     # Public web API (D64). The daily cap leaves generator quota (about 2 calls per ask) for evals.
