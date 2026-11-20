@@ -13,6 +13,7 @@ from pathlib import Path
 import psycopg
 
 from niyam.assistant import pipeline
+from niyam.assistant.tracing import build_tracer
 from niyam.config import get_settings
 from niyam.corpus import build, download
 from niyam.evals import answers as answers_eval
@@ -100,6 +101,7 @@ def _ask(message: str, as_of: date) -> int:
             models.embedder,
             conn,
             settings.generation_thinking_level,
+            build_tracer(settings),
         )
         reply = pipeline.answer(message, as_of, services)
     print(pipeline.render(reply))

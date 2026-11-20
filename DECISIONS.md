@@ -542,3 +542,24 @@ D66 (4b), D67 (4c) and D68 (4d) so the numbering does not collide.
 evals are bound by free-tier judge speed and generator quota. *Tradeoff:* the public page may
 show an assistant whose measured scores are incomplete; the disclaimer and the daily cap
 (D64) still apply, and public traffic shares the generator quota with the evals.
+
+**D67. Trace each answer to Langfuse: one trace, a span per stage, three scores, fail-safe.**
+Proposed by the Phase 4c session on 2026-11-20 under D64/D65; awaiting owner review.
+`pipeline.answer` opens one trace (root observation `answer`) through a `Tracer` carried in
+`Services`; `_StageTimer` wraps each of `extract`, `rules`, `retrieve`, `rerank`, `explain`,
+`verify` in a child span, so tracing reuses the D64 orchestration. Each trace is scored with
+`withheld` and `rerank_failed` (boolean) and `findings` (count). Only the restated question and
+`as_of` are sent as input, never the student's message: neither section 10 nor any D-entry
+allows sending it, and the restated question already omits identifiers. Failed stages send
+only the error type name. `niyam ask` and the web API trace when `LANGFUSE_TRACING` is true
+(default); evals build `Services` without a tracer and never trace. `build_tracer` calls
+`auth_check()` once at startup and falls back to no tracing, logged once, if Langfuse is
+unreachable or rejects the keys; any later SDK exception switches tracing off for the process,
+also logged once. Answers never call `flush()`; the SDK exports in a background thread.
+*Why:* section 10 asks for per-stage spans and scores; measured SDK behaviour (docs/providers.md)
+shows `flush()` blocks for seconds and `auth_check()` raises when Langfuse is down, so neither
+may run per answer. *Tradeoff:* if Langfuse is down at startup, tracing stays off until restart;
+if it goes down later, the SDK's own exporter logs a failure per batch (not once), which we do
+not suppress. By the docs' unit definition each answer costs 11 units (1 trace, 7
+observations, 3 scores), so 150 asks a day (the D64 cap) for 30 days is 49,500 units, just under
+the Hobby plan's 50,000; tracing evals as well would exceed it.

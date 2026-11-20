@@ -99,6 +99,19 @@ pgvector's HNSW index supports up to 2,000 dimensions for `vector`, so 768 fits 
   scores on 16 November 2026. SDK v5 sends traces over OpenTelemetry, so it is unaffected.
 - Measured: a 401 "Invalid credentials" was caused by the public and secret keys being swapped
   in `.env`; with the correct order, `auth_check()` returned true.
+- Re-checked 2026-11-20 (Phase 4c): 5.2.0 is still the latest release on PyPI; the Hobby plan on
+  the pricing page is unchanged (free, 50k units, 30 days, 1,000 ingestion requests per minute;
+  overage still not stated).
+- Measured 2026-11-20, after the ingestion cutoff: a root `start_observation(as_type="chain")`
+  with a child span from `root.start_observation(...)`, plus `root.score_trace(...)` with
+  `data_type="BOOLEAN"` (value 0, read back as `False`) and `"NUMERIC"`, all arrived. The root
+  observation's `input`/`output` are stored as JSON strings.
+- Reading back: 5.2.0's `api.trace` has no `get`; use `api.observations.get_many(trace_id=...,
+  fields="core,basic,io")` and `api.scores.get_many(trace_id=...)`.
+- Measured with an unreachable host: creating, ending and scoring spans returns at once (1 ms
+  for a trace) and export fails in a background thread, logged by the SDK's own loggers per
+  failed batch; `flush()` blocks (6,161 ms with `timeout=2`); `auth_check()` raises the
+  transport error (`httpx.ConnectTimeout`) rather than returning false.
 
 ## Postgres: Neon (Free plan)
 
