@@ -942,6 +942,68 @@ button:disabled {
   color: var(--muted);
 }
 
+/* Feedback bar (D76) */
+.feedback-bar {
+  padding: 16px 20px;
+}
+
+.feedback-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedback-prompt {
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip.active-good {
+  border-color: var(--ok);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.chip.active-bad {
+  border-color: var(--bad);
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+.feedback-status {
+  margin: 10px 0 0;
+}
+
+.feedback-note {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.feedback-note input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--raise);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.feedback-note input::placeholder {
+  color: var(--muted);
+}
+
 /* How it works */
 .how {
   padding: 72px 0 40px;

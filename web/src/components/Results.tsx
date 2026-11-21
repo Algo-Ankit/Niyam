@@ -1,6 +1,7 @@
 import { motion, type Variants } from 'motion/react'
 import { useState } from 'react'
 
+import { sendFeedback } from '../lib/api'
 import {
   STATUS_INFO,
   factLabel,
@@ -42,6 +43,9 @@ export function Results({ reply, asOf, sample }: Props) {
         <motion.div variants={rise} className="card answer">
           <p className="explanation">{reply.explanation}</p>
         </motion.div>
+        {!sample && reply.trace_id && (
+          <FeedbackBar key={reply.trace_id} traceId={reply.trace_id} />
+        )}
       </motion.section>
     )
   }
@@ -153,10 +157,87 @@ export function Results({ reply, asOf, sample }: Props) {
         />
       </motion.div>
 
+      {!sample && reply.trace_id && (
+        <FeedbackBar key={reply.trace_id} traceId={reply.trace_id} />
+      )}
+
       <motion.p variants={rise} className="disclaimer">
         {reply.disclaimer}
       </motion.p>
     </motion.section>
+  )
+}
+
+function FeedbackBar({ traceId }: { traceId: string }) {
+  const [choice, setChoice] = useState<'helpful' | 'not_helpful' | null>(null)
+  const [note, setNote] = useState('')
+  const [noteSent, setNoteSent] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  async function vote(helpful: boolean) {
+    if (sending) return
+    setSending(true)
+    setChoice(helpful ? 'helpful' : 'not_helpful')
+    await sendFeedback(traceId, helpful)
+    setSending(false)
+  }
+
+  async function submitNote(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (sending || !note.trim()) return
+    setSending(true)
+    await sendFeedback(traceId, false, note)
+    setNoteSent(true)
+    setSending(false)
+  }
+
+  return (
+    <motion.div variants={rise} className="card feedback-bar">
+      <div className="feedback-row">
+        <span className="feedback-prompt">Was this answer helpful?</span>
+        <div className="feedback-actions">
+          <button
+            type="button"
+            className={`chip${choice === 'helpful' ? ' active-good' : ''}`}
+            disabled={sending}
+            aria-pressed={choice === 'helpful'}
+            onClick={() => void vote(true)}
+          >
+            Helpful
+          </button>
+          <button
+            type="button"
+            className={`chip${choice === 'not_helpful' ? ' active-bad' : ''}`}
+            disabled={sending}
+            aria-pressed={choice === 'not_helpful'}
+            onClick={() => void vote(false)}
+          >
+            Not helpful
+          </button>
+        </div>
+      </div>
+      {choice === 'helpful' && (
+        <p className="muted small feedback-status">Thanks — recorded for quality review.</p>
+      )}
+      {choice === 'not_helpful' && !noteSent && (
+        <form className="feedback-note" onSubmit={(e) => void submitNote(e)}>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={300}
+            placeholder="What was wrong or missing? (optional)"
+            aria-label="What was wrong or missing?"
+          />
+          <button type="submit" className="chip" disabled={sending || !note.trim()}>
+            Send note
+          </button>
+        </form>
+      )}
+      {choice === 'not_helpful' && noteSent && (
+        <p className="muted small feedback-status">Thanks — note recorded for quality review.</p>
+      )}
+    </motion.div>
   )
 }
 

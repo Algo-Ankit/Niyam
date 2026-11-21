@@ -45,6 +45,7 @@ export interface Reply {
   citations: string[]
   withheld_reason: string | null
   rerank_failed: boolean
+  trace_id?: string | null
   disclaimer: string
   not_covered: string
 }

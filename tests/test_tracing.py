@@ -25,15 +25,16 @@ CITATION = "8 CFR 214.2(f)(11)(i)(B)(2)"
 
 
 class FakeObservation:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, trace_id: str = "trace_test_123456") -> None:
         self.name = name
+        self.trace_id = trace_id
         self.children: list[FakeObservation] = []
         self.updates: list[dict[str, Any]] = []
         self.scores: dict[str, tuple[float, str]] = {}
         self.ended = False
 
     def start_observation(self, *, name: str) -> "FakeObservation":
-        child = FakeObservation(name)
+        child = FakeObservation(name, self.trace_id)
         self.children.append(child)
         return child
 
@@ -50,6 +51,7 @@ class FakeObservation:
 class FakeLangfuse:
     def __init__(self, fail: bool = False) -> None:
         self.roots: list[FakeObservation] = []
+        self.created_scores: list[dict[str, Any]] = []
         self.calls = 0
         self.flushes = 0
         self._fail = fail
@@ -66,6 +68,11 @@ class FakeLangfuse:
         root = FakeObservation(name)
         self.roots.append(root)
         return root
+
+    def create_score(self, **fields: Any) -> None:
+        if self._fail:
+            raise ConnectionError("langfuse is down")
+        self.created_scores.append(fields)
 
 
 class ScriptedGenerator:
@@ -267,3 +274,52 @@ def test_build_tracer_falls_back_when_credentials_are_rejected(
     monkeypatch.setattr(tracing, "Langfuse", Rejecting)
     assert build_tracer(_settings(tracing_on=True)) is NO_TRACING
     assert Rejecting.shut_down
+
+
+def test_trace_exposes_trace_id_and_enriched_outcome_without_raw_message() -> None:
+    client = FakeLangfuse()
+    reply = pipeline.answer(MESSAGE, AS_OF, _services(LangfuseTracer(cast(Langfuse, client))))
+
+    assert reply.trace_id == "trace_test_123456"
+    output = client.roots[0].updates[-1]["output"]
+    assert output["kind"] == "question"
+    assert output["withheld_reason"] is None
+    assert output["cited_provisions"] == [CITATION]
+    assert output["explanation"] == "See the rule."
+    assert output["findings_summaries"]
+    assert "N0012345678" not in repr(output) and MESSAGE not in repr(output)
+
+
+def test_withheld_explanation_is_omitted_from_trace_outcome() -> None:
+    client = FakeLangfuse()
+    services = _services(
+        LangfuseTracer(cast(Langfuse, client)),
+        generator=ScriptedGenerator(["8 CFR 214.2(f)(99)"]),
+    )
+    reply = pipeline.answer(MESSAGE, AS_OF, services)
+
+    assert reply.rejected_reason is not None
+    output = client.roots[0].updates[-1]["output"]
+    assert output["withheld"] is True
+    assert output["explanation"] is None
+    assert output["cited_provisions"] == []
+
+
+def test_score_feedback_uses_idempotent_score_id_and_handles_failures() -> None:
+    healthy = FakeLangfuse()
+    tracer = LangfuseTracer(cast(Langfuse, healthy))
+    assert tracer.score_feedback("trace_12345678", False, "missed cap-gap") is True
+    assert healthy.flushes == 1
+    assert healthy.created_scores == [
+        {
+            "trace_id": "trace_12345678",
+            "name": "user_feedback",
+            "value": 0,
+            "data_type": "BOOLEAN",
+            "comment": "missed cap-gap",
+            "score_id": "feedback-trace_12345678",
+        }
+    ]
+    down = LangfuseTracer(cast(Langfuse, FakeLangfuse(fail=True)))
+    assert down.score_feedback("trace_12345678", True) is False
+    assert NO_TRACING.score_feedback("trace_12345678", True) is False

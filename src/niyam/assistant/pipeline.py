@@ -13,14 +13,14 @@ import re
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Literal, get_args
 
 import psycopg
 from pydantic import BaseModel, Field
 
-from niyam.assistant.tracing import NO_TRACING, Trace, Tracer
+from niyam.assistant.tracing import NO_TRACING, Trace, TraceDetails, Tracer
 from niyam.config import ThinkingLevel
 from niyam.models.errors import ModelError
 from niyam.models.interfaces import DecisionModel, Embedder, GenerativeModel
@@ -131,6 +131,7 @@ class Reply:
     explanation: Explanation  # the generator's draft; shown only if rejected_reason is None
     rejected_reason: str | None
     rerank_error: str | None  # set when reranking failed and vector order was used instead
+    trace_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -149,12 +150,24 @@ def answer(
     """The full reply; `on_stage(stage, ms)` is called as each of `STAGES` finishes."""
     with services.tracer.trace() as trace:
         reply = _answer(message, as_of, services, _StageTimer(on_stage, trace))
+        shown = reply.rejected_reason is None
+        details = TraceDetails(
+            kind=reply.extraction.kind,
+            out_of_scope=tuple(reply.extraction.out_of_scope),
+            withheld_reason=reply.rejected_reason,
+            cited_provisions=tuple(reply.explanation.citations if shown else ()),
+            findings_summaries=tuple(
+                f"{f.summary} ({f.citation})" for f in reply.assessment.findings
+            ),
+            explanation=reply.explanation.explanation if shown else None,
+        )
         trace.finish(
-            withheld=reply.rejected_reason is not None,
+            withheld=not shown,
             rerank_failed=reply.rerank_error is not None,
             findings=len(reply.assessment.findings),
+            details=details,
         )
-    return reply
+        return replace(reply, trace_id=trace.trace_id)
 
 
 def _answer(message: str, as_of: date, services: Services, stage: "_StageTimer") -> Reply:

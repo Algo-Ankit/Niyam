@@ -19,7 +19,7 @@ AS_OF = date(2026, 11, 20)
 ORIGIN = "http://localhost:5173"
 
 
-def _reply(rejected_reason: str | None = None) -> pipeline.Reply:
+def _reply(rejected_reason: str | None = None, trace_id: str | None = None) -> pipeline.Reply:
     facts = StudentFacts(program_end_date=date(2026, 5, 15))
     return pipeline.Reply(
         extraction=pipeline.Extraction(facts=facts, question="When must I file for OPT?"),
@@ -30,6 +30,7 @@ def _reply(rejected_reason: str | None = None) -> pipeline.Reply:
         ),
         rejected_reason=rejected_reason,
         rerank_error=None,
+        trace_id=trace_id,
     )
 
 
@@ -234,3 +235,69 @@ def test_a_reply_sent_in_time_is_not_followed_by_busy_when_cleanup_runs_late() -
     events = _ask(TestClient(app))
     assert events[-1][0] == "reply"
     assert all(name != "error" for name, _ in events)
+
+
+def test_reply_includes_trace_id_and_feedback_endpoint_records_it() -> None:
+    calls: list[tuple[str, bool, str | None]] = []
+
+    def record(trace_id: str, helpful: bool, comment: str | None) -> bool:
+        calls.append((trace_id, helpful, comment))
+        return True
+
+    app = build_app(
+        _answering(_reply(trace_id="trace_abc_12345")),
+        AskLimiter(100, 100),
+        [ORIGIN],
+        record_feedback=record,
+    )
+    client = TestClient(app)
+    reply = _ask(client)[-1][1]
+    assert reply["trace_id"] == "trace_abc_12345"
+
+    res = client.post(
+        "/api/feedback",
+        json={"trace_id": "trace_abc_12345", "helpful": False, "comment": "  wrong deadline  "},
+    )
+    assert res.status_code == 200 and res.json() == {"recorded": True}
+    blank = client.post(
+        "/api/feedback",
+        json={"trace_id": "trace_abc_12345", "helpful": True, "comment": "   "},
+    )
+    assert blank.status_code == 200
+    assert calls == [
+        ("trace_abc_12345", False, "wrong deadline"),
+        ("trace_abc_12345", True, None),
+    ]
+
+
+def test_feedback_validation_rate_limit_and_error_safety() -> None:
+    def broken(trace_id: str, helpful: bool, comment: str | None) -> bool:
+        raise RuntimeError("boom")
+
+    app = build_app(
+        _answering(_reply()),
+        AskLimiter(100, 100),
+        [ORIGIN],
+        record_feedback=broken,
+        feedback_limiter=AskLimiter(1, 10),
+    )
+    client = TestClient(app)
+    assert (
+        client.post("/api/feedback", json={"trace_id": "short", "helpful": True}).status_code == 422
+    )
+    assert (
+        client.post("/api/feedback", json={"trace_id": "bad;trace_id", "helpful": True}).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/feedback",
+            json={"trace_id": "trace_valid_123", "helpful": False, "comment": "x" * 301},
+        ).status_code
+        == 422
+    )
+
+    first = client.post("/api/feedback", json={"trace_id": "trace_valid_123", "helpful": False})
+    assert first.status_code == 200 and first.json() == {"recorded": False}
+    limited = client.post("/api/feedback", json={"trace_id": "trace_valid_123", "helpful": True})
+    assert limited.status_code == 429 and int(limited.headers["retry-after"]) > 0

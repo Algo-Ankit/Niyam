@@ -1,0 +1,107 @@
+# Asynchronous online evaluation & failure harvesting from Langfuse Cloud traces (D76).
+name: Online Eval
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "Lookback window in hours"
+        required: false
+        default: "24"
+        type: string
+      max_judge:
+        description: "Maximum unscored live answers to judge with Gemma"
+        required: false
+        default: "10"
+        type: string
+      dry_run:
+        description: "Evaluate without writing scores or dataset items back to Langfuse"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  online-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        id: secrets
+        env:
+          HAS_LF_PK: ${{ secrets.LANGFUSE_PUBLIC_KEY != '' }}
+          HAS_LF_SK: ${{ secrets.LANGFUSE_SECRET_KEY != '' }}
+          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
+        run: |
+          missing=""
+          [ "$HAS_LF_PK" = "true" ] || missing="$missing LANGFUSE_PUBLIC_KEY"
+          [ "$HAS_LF_SK" = "true" ] || missing="$missing LANGFUSE_SECRET_KEY"
+          [ "$HAS_GEMINI" = "true" ] || missing="$missing GEMINI_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "Missing repository secret(s):$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::Add LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and GEMINI_API_KEY in Settings > Secrets and variables > Actions."
+              exit 1
+            fi
+            echo "::notice::Skipping scheduled online-eval until secrets are configured:$missing"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - if: steps.secrets.outputs.ready == 'true'
+        uses: actions/checkout@v7
+
+      - if: steps.secrets.outputs.ready == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - if: steps.secrets.outputs.ready == 'true'
+        uses: actions/cache@v6
+        with:
+          path: |
+            .tools/uv-cache
+            .tools/python
+          key: tools-${{ runner.os }}-${{ hashFiles('uv.lock', 'scripts/bootstrap.sh') }}
+
+      - if: steps.secrets.outputs.ready == 'true'
+        name: Bootstrap the repo-local toolchain
+        run: bash scripts/bootstrap.sh
+
+      - if: steps.secrets.outputs.ready == 'true'
+        name: Run online evaluation and harvest failures
+        id: run
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST || 'https://cloud.langfuse.com' }}
+          DATABASE_URL: postgresql://unused@localhost/unused
+        run: |
+          hours="${{ inputs.hours || '24' }}"
+          max_judge="${{ inputs.max_judge || '10' }}"
+          dry_flag=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            dry_flag="--dry-run"
+          fi
+          .tools/bootstrap/bin/uv run --frozen niyam online-eval \
+            --hours "$hours" \
+            --max-judge "$max_judge" \
+            --out online-failures.jsonl \
+            $dry_flag
+          if [ -s online-failures.jsonl ]; then
+            echo "has_failures=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_failures=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: always() && steps.run.outputs.has_failures == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-failures
+          path: online-failures.jsonl
+          retention-days: 30

@@ -1,13 +1,15 @@
-"""Langfuse tracing for answers (D67): one trace per answer, one span per stage, three scores.
+"""Langfuse tracing for answers (D67, D76): one trace, one span per stage, scores, fail-safe.
 
 Tracing never changes an answer. Every Langfuse call is guarded; the first failure is logged once
-and tracing stays off for the rest of the process. Only the restated question is sent, never the
-student's own message, and no secret or error text leaves the process (error type names only).
+and tracing stays off for the rest of the process. Only the restated question and structured
+reply outcomes are sent, never the student's own raw message, and no secret or error text leaves
+the process (error type names only).
 """
 
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
+from dataclasses import dataclass
 from datetime import date
 from functools import partial
 from typing import Any, Protocol
@@ -19,12 +21,34 @@ from niyam.config import Settings
 _log = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class TraceDetails:
+    """Structured answer outcome fields recorded for online evaluation (D76)."""
+
+    kind: str = "question"
+    out_of_scope: tuple[str, ...] = ()
+    withheld_reason: str | None = None
+    cited_provisions: tuple[str, ...] = ()
+    findings_summaries: tuple[str, ...] = ()
+    explanation: str | None = None
+
+
 class Trace(Protocol):
+    @property
+    def trace_id(self) -> str | None: ...
+
     def stage(self, name: str) -> AbstractContextManager[None]: ...
 
     def question(self, text: str, as_of: date) -> None: ...
 
-    def finish(self, *, withheld: bool, rerank_failed: bool, findings: int) -> None: ...
+    def finish(
+        self,
+        *,
+        withheld: bool,
+        rerank_failed: bool,
+        findings: int,
+        details: TraceDetails | None = None,
+    ) -> None: ...
 
 
 class Tracer(Protocol):
@@ -32,15 +56,28 @@ class Tracer(Protocol):
 
     def flush(self) -> None: ...
 
+    def score_feedback(self, trace_id: str, helpful: bool, comment: str | None = None) -> bool: ...
+
 
 class _NoTrace:
+    @property
+    def trace_id(self) -> str | None:
+        return None
+
     def stage(self, name: str) -> AbstractContextManager[None]:
         return nullcontext()
 
     def question(self, text: str, as_of: date) -> None:
         return None
 
-    def finish(self, *, withheld: bool, rerank_failed: bool, findings: int) -> None:
+    def finish(
+        self,
+        *,
+        withheld: bool,
+        rerank_failed: bool,
+        findings: int,
+        details: TraceDetails | None = None,
+    ) -> None:
         return None
 
 
@@ -52,6 +89,9 @@ class NoTracing:
 
     def flush(self) -> None:
         return None
+
+    def score_feedback(self, trace_id: str, helpful: bool, comment: str | None = None) -> bool:
+        return False
 
 
 NO_TRACING = NoTracing()
@@ -80,6 +120,23 @@ class LangfuseTracer:
         """Export buffered spans now; a serverless instance may be frozen after the response."""
         self.guard(self._client.flush)
 
+    def score_feedback(self, trace_id: str, helpful: bool, comment: str | None = None) -> bool:
+        """Record idempotent thumbs up/down feedback on a trace."""
+
+        def send() -> bool:
+            self._client.create_score(
+                trace_id=trace_id,
+                name="user_feedback",
+                value=1 if helpful else 0,
+                data_type="BOOLEAN",
+                comment=comment or None,
+                score_id=f"feedback-{trace_id}",
+            )
+            self._client.flush()
+            return True
+
+        return bool(self.guard(send))
+
     def guard[T](self, action: Callable[[], T]) -> T | None:
         """`action()`, or None once any Langfuse call has failed."""
         if self._failed:
@@ -96,6 +153,11 @@ class _LangfuseTrace:
     def __init__(self, tracer: LangfuseTracer, root: Any) -> None:
         self._tracer = tracer
         self._root = root
+
+    @property
+    def trace_id(self) -> str | None:
+        tid = getattr(self._root, "trace_id", None) if self._root is not None else None
+        return str(tid) if tid else None
 
     @contextmanager
     def stage(self, name: str) -> Iterator[None]:
@@ -114,11 +176,31 @@ class _LangfuseTrace:
             payload = {"question": text, "as_of": as_of.isoformat()}
             self._tracer.guard(lambda: self._root.update(input=payload))
 
-    def finish(self, *, withheld: bool, rerank_failed: bool, findings: int) -> None:
+    def finish(
+        self,
+        *,
+        withheld: bool,
+        rerank_failed: bool,
+        findings: int,
+        details: TraceDetails | None = None,
+    ) -> None:
         root = self._root
         if root is None:
             return
-        outcome = {"withheld": withheld, "rerank_failed": rerank_failed, "findings": findings}
+        outcome: dict[str, Any] = {
+            "withheld": withheld,
+            "rerank_failed": rerank_failed,
+            "findings": findings,
+        }
+        if details is not None:
+            outcome |= {
+                "kind": details.kind,
+                "out_of_scope": list(details.out_of_scope),
+                "withheld_reason": details.withheld_reason,
+                "cited_provisions": list(details.cited_provisions),
+                "findings_summaries": list(details.findings_summaries),
+                "explanation": details.explanation,
+            }
 
         def send() -> None:
             root.update(output=outcome)

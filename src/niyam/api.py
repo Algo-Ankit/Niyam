@@ -56,6 +56,16 @@ class AskRequest(BaseModel):
     as_of: date | None = None  # the student's local date; the server's date if omitted
 
 
+class FeedbackRequest(BaseModel):
+    trace_id: str = Field(min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
+    helpful: bool
+    comment: str | None = Field(default=None, max_length=300)
+
+
+def _no_feedback(trace_id: str, helpful: bool, comment: str | None) -> bool:
+    return False
+
+
 @dataclass(frozen=True)
 class Refusal:
     message: str
@@ -122,6 +132,8 @@ def create_app() -> FastAPI:
         deadline_seconds=settings.ask_deadline_seconds,
         after_reply=tracer.flush,
         on_shutdown=models.close,
+        record_feedback=tracer.score_feedback,
+        feedback_limiter=AskLimiter(120, 1000),
     )
 
 
@@ -135,6 +147,8 @@ def build_app(  # noqa: PLR0913  # each argument is a separate deployment concer
     deadline_seconds: float = 50.0,
     after_reply: Callable[[], None] = lambda: None,
     on_shutdown: Callable[[], None] = lambda: None,
+    record_feedback: Callable[[str, bool, str | None], bool] = _no_feedback,
+    feedback_limiter: AskLimiter | None = None,
 ) -> FastAPI:
     """The app. `after_reply` runs once the reply or error is sent, before the stream closes."""
 
@@ -173,6 +187,24 @@ def build_app(  # noqa: PLR0913  # each argument is a separate deployment concer
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    @app.post("/api/feedback")
+    def feedback(body: FeedbackRequest, request: Request) -> dict[str, bool]:
+        if feedback_limiter is not None:
+            refusal = feedback_limiter.admit(_client_ip(request, client_ip_header))
+            if refusal is not None:
+                raise HTTPException(
+                    status_code=429,
+                    detail=refusal.message,
+                    headers={"Retry-After": str(refusal.retry_after_seconds)},
+                )
+        clean_comment = body.comment.strip() if body.comment is not None else None
+        try:
+            recorded = bool(record_feedback(body.trace_id, body.helpful, clean_comment or None))
+        except Exception:
+            _log.exception("feedback failed")
+            return {"recorded": False}
+        return {"recorded": recorded}
 
     return app
 
@@ -289,6 +321,7 @@ def reply_json(reply: pipeline.Reply) -> dict[str, Any]:
         "citations": reply.explanation.citations if shown else [],
         "withheld_reason": reply.rejected_reason,
         "rerank_failed": reply.rerank_error is not None,
+        "trace_id": reply.trace_id,
         "disclaimer": pipeline.DISCLAIMER,
         "not_covered": pipeline.NOT_COVERED,
     }

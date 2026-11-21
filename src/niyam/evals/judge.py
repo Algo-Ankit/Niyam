@@ -41,7 +41,7 @@ def judge(  # noqa: PLR0913 (each argument is one part of the judged case)
         f"Computed findings given to the assistant:\n{findings or '(none)'}\n\n"
         f"Provisions given to the assistant:\n{provisions}"
     )
-    return _verdict(model, prompt, Verdict)
+    return request_verdict(model, prompt, Verdict)
 
 
 class RubricVerdict(BaseModel):
@@ -66,12 +66,12 @@ def judge_rubric(
         f"Required points (all must be conveyed):\n{must_say or '(none)'}\n\n"
         f"Forbidden claims (none may appear):\n{must_not_say or '(none)'}"
     )
-    return _verdict(model, prompt, RubricVerdict)
+    return request_verdict(model, prompt, RubricVerdict)
 
 
 # NOTE: gemma-4-31b-it sometimes returns JSON that does not parse (seen 2026-11-19). Only parsed
 # outputs are cached, so each retry is a fresh request.
-def _verdict[V: BaseModel](model: GenerativeModel, prompt: str, schema: type[V]) -> V:
+def request_verdict[V: BaseModel](model: GenerativeModel, prompt: str, schema: type[V]) -> V:
     """The judge's verdict, retrying malformed output; raises after JUDGE_ATTEMPTS tries."""
     for attempt in range(JUDGE_ATTEMPTS):
         try:

@@ -696,3 +696,22 @@ gate protects invariants, rules behavior, and committed baselines deterministica
 consuming free-tier quota or hours of runtime. *Tradeoff:* CI cannot detect LLM prompt regressions
 until offline evals are re-run manually in v2, and the R16 audit is inter-model rather than human
 calibration until owner spot-check.
+
+**D76. Enrich Langfuse traces, collect web feedback, and harvest live failures via `online-eval`.**
+Owner-approved on 2026-11-21. Amends D67: `LangfuseTracer` now also records `kind`,
+`out_of_scope`, `withheld_reason`, `cited_provisions`, `findings_summaries`, and shown
+`explanation` (still never the raw student message), and `pipeline.Reply` exposes `trace_id`.
+The API adds a rate-limited `POST /api/feedback` endpoint and the web UI shows a `Helpful` /
+`Not helpful` bar (with an optional note on `Not helpful`) on live replies (`!sample`) backed by
+idempotent `user_feedback` scores (`score_id="feedback-{trace_id}"`). `niyam online-eval` and a
+scheduled/manual workflow (`.github/workflows/online-eval.yml`) read recent `answer` traces from
+Langfuse, run bounded Gemma grounding checks against the local corpus with provision headings,
+classify failures (`stage_error`, `withheld_*`, `rerank_failed`, `negative_feedback`,
+`ungrounded`), post `online_grounded` and `failure_type` scores, and upsert failed traces into
+the `niyam-live-failures` Langfuse Dataset (plus optional JSONL output).
+*Why:* online judging stays outside Vercel's 60 s `/api/ask` deadline (D71), enriches failure
+diagnostics, and builds a human-reviewed production-to-eval flywheel without allowing untrusted
+live traffic to auto-mutate legal prompts or rules unsupervised. *Tradeoff:* requires 3 GitHub
+Actions secrets (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `GEMINI_API_KEY`) to enable the
+scheduled workflow (skipped cleanly on schedule when absent) and adds structured answer fields to
+Langfuse within the 50k units/month Hobby limit.

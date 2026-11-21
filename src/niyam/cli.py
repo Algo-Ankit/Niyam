@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import psycopg
+from langfuse import Langfuse
 
 from niyam.assistant import pipeline
 from niyam.assistant.tracing import build_tracer
@@ -23,6 +24,7 @@ from niyam.evals import answers as answers_eval
 from niyam.evals import edge as edge_eval
 from niyam.evals import end_to_end, gate, report
 from niyam.evals import extraction as extraction_eval
+from niyam.evals import online as online_eval
 from niyam.evals import retrieval as retrieval_eval
 from niyam.models.factory import build_models
 from niyam.models.interfaces import DecisionModel
@@ -360,6 +362,50 @@ def _eval_report(output: Path, *, check: bool) -> int:
     return 0
 
 
+def _online_eval(config: online_eval.OnlineEvalConfig) -> int:
+    settings = get_settings()
+    client = Langfuse(
+        public_key=settings.langfuse_public_key.get_secret_value(),
+        secret_key=settings.langfuse_secret_key.get_secret_value(),
+        host=settings.langfuse_host,
+    )
+    try:
+        try:
+            ok = client.auth_check()
+        except Exception as error:
+            print(f"Langfuse unavailable ({type(error).__name__})", file=sys.stderr)
+            return 1
+        if not ok:
+            print("Langfuse rejected the credentials", file=sys.stderr)
+            return 1
+        corpus_map = online_eval.load_corpus_map(F1_CORPUS)
+        with closing(build_models(settings)) as models:
+            summary = online_eval.run_online_eval(
+                online_eval.LangfuseOnlineStore(client),
+                models.judge,
+                corpus_map,
+                config=config,
+            )
+    finally:
+        client.shutdown()
+    mode = " (dry-run)" if config.dry_run else ""
+    print(
+        f"online-eval{mode}: fetched={summary.traces_fetched} "
+        f"judged={summary.newly_judged} judge_failed={summary.judge_failed} "
+        f"failures={summary.failures_harvested}"
+    )
+    if summary.counts_by_type:
+        print(f"  counts={summary.counts_by_type}")
+    for item in summary.harvested:
+        print(
+            f"  [{item.failure_type}/{item.suggested_bucket}] "
+            f"{item.trace.trace_id}: {item.trace.question[:90]}"
+        )
+    if config.out_path is not None:
+        print(f"  failures JSONL: {config.out_path}")
+    return 0
+
+
 def main() -> None:
     args = _build_parser().parse_args()
     sys.exit(_dispatch(args))
@@ -402,6 +448,19 @@ def _add_eval_parsers(commands: argparse._SubParsersAction[argparse.ArgumentPars
     rep = commands.add_parser("eval-report", help="generate docs/results.md from results/*.json")
     rep.add_argument("output", nargs="?", type=Path, default=Path("docs/results.md"))
     rep.add_argument("--check", action="store_true", help="fail if output differs from generated")
+    online = commands.add_parser(
+        "online-eval", help="score recent Langfuse traces and harvest failures"
+    )
+    online.add_argument("--hours", type=int, default=24, help="lookback window in hours")
+    online.add_argument("--max-traces", type=int, default=50, help="maximum traces to inspect")
+    online.add_argument("--max-judge", type=int, default=10, help="maximum live answers to judge")
+    online.add_argument(
+        "--dataset", default=online_eval.DEFAULT_DATASET, help="Langfuse dataset for failures"
+    )
+    online.add_argument("--out", type=Path, default=None, help="optional JSONL output for failures")
+    online.add_argument(
+        "--dry-run", action="store_true", help="evaluate without writing scores or dataset items"
+    )
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -420,6 +479,16 @@ def _dispatch(args: argparse.Namespace) -> int:
         "eval-edge": lambda: _eval_edge(args.output, args.sets or list(EDGE_SETS)),
         "eval-gate": _eval_gate,
         "eval-report": lambda: _eval_report(args.output, check=args.check),
+        "online-eval": lambda: _online_eval(
+            online_eval.OnlineEvalConfig(
+                hours=args.hours,
+                max_traces=args.max_traces,
+                max_judge=args.max_judge,
+                dataset_name=args.dataset,
+                dry_run=args.dry_run,
+                out_path=args.out,
+            )
+        ),
         "ask": lambda: _ask(args.message, args.as_of),
     }
     return handlers[str(args.command)]()

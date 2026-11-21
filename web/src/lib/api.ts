@@ -45,6 +45,32 @@ export async function ask(
   return readEvents(response.body, onStage)
 }
 
+/** Sends optional thumbs up/down feedback on a live answer trace (D76). */
+export async function sendFeedback(
+  traceId: string,
+  helpful: boolean,
+  comment?: string,
+): Promise<boolean> {
+  const payload: { trace_id: string; helpful: boolean; comment?: string } = {
+    trace_id: traceId,
+    helpful,
+  }
+  const trimmed = comment?.trim()
+  if (trimmed) payload.comment = trimmed
+  try {
+    const response = await fetch(`${API}/api/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) return false
+    const data = (await response.json()) as { recorded?: unknown }
+    return data.recorded === true
+  } catch {
+    return false
+  }
+}
+
 async function detail(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: unknown }

@@ -117,6 +117,13 @@ pgvector's HNSW index supports up to 2,000 dimensions for `vector`, so 768 fits 
   for a trace) and export fails in a background thread, logged by the SDK's own loggers per
   failed batch; `flush()` blocks (6,161 ms with `timeout=2`); `auth_check()` raises the
   transport error (`httpx.ConnectTimeout`) rather than returning false.
+- Measured 2026-11-21 (online eval & dataset check): `iter_observation_pages(is_root_observation=True,
+  name="answer", fields="core,basic,io")` returns `ObservationV2` objects with `input` and
+  `output` as JSON `str`, `start_time` as `datetime`, a 32-char `trace_id`, and `level` (`"DEFAULT"`
+  or `"ERROR"`). `api.scores.get_many(trace_id=...)` returns `ScoreV3_*` union models (`Boolean`,
+  `Categorical`, `Numeric`, etc.), all exposing `.value` and `.comment` (no `.string_value` on
+  `ScoreV3_Boolean`). `create_dataset(name="niyam-live-failures", ...)` succeeded and is
+  idempotent when called again with the same name.
 
 ## Postgres: Neon (Free plan)
 
