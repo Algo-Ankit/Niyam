@@ -51,7 +51,13 @@ class FakeLangfuse:
     def __init__(self, fail: bool = False) -> None:
         self.roots: list[FakeObservation] = []
         self.calls = 0
+        self.flushes = 0
         self._fail = fail
+
+    def flush(self) -> None:
+        self.flushes += 1
+        if self._fail:
+            raise ConnectionError("langfuse is down")
 
     def start_observation(self, *, name: str, as_type: str) -> FakeObservation:
         self.calls += 1
@@ -185,6 +191,15 @@ def test_langfuse_failure_never_breaks_answers_and_is_logged_once(
     assert [r.getMessage() for r in caplog.records] == [
         "Langfuse tracing failed (ConnectionError); off until restart"
     ]
+
+
+def test_flush_exports_spans_and_a_failure_is_swallowed() -> None:
+    healthy, down = FakeLangfuse(), FakeLangfuse(fail=True)
+    LangfuseTracer(cast(Langfuse, healthy)).flush()
+    LangfuseTracer(cast(Langfuse, down)).flush()  # must not raise
+    NO_TRACING.flush()
+    assert healthy.flushes == 1
+    assert down.flushes == 1
 
 
 def test_answers_are_untraced_by_default() -> None:

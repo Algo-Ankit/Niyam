@@ -34,4 +34,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     FORWARDED_ALLOW_IPS="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1"
 USER niyam
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import os, urllib.request as r; r.urlopen('http://127.0.0.1:%s/api/health' % os.environ.get('PORT', '8000'), timeout=4)"
 CMD ["sh", "-c", "exec uvicorn niyam.api:create_app --factory --host 0.0.0.0 --port \"$PORT\" --proxy-headers"]

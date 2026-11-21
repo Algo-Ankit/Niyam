@@ -171,3 +171,31 @@ def test_snapshot_date_comes_from_the_manifest_last_modified_header(tmp_path: Pa
     manifest.write_text(json.dumps([entry]), encoding="utf-8")
     assert last_modified_date(manifest, ECFR_TITLE_8) == date(2026, 10, 15)
     assert last_modified_date(tmp_path / "missing.json", ECFR_TITLE_8) is None
+
+
+def test_the_limit_keys_on_the_platform_client_ip_header() -> None:
+    app = build_app(
+        _answering(_reply()),
+        AskLimiter(per_client_per_hour=1, daily_cap=100),
+        [ORIGIN],
+        client_ip_header="x-real-ip",
+    )
+    client = TestClient(app)
+    body = {"message": "When must I file for OPT?"}
+    first = client.post("/api/ask", json=body, headers={"x-real-ip": "203.0.113.7"})
+    second = client.post("/api/ask", json=body, headers={"x-real-ip": "203.0.113.7"})
+    other = client.post("/api/ask", json=body, headers={"x-real-ip": "198.51.100.2"})
+    assert (first.status_code, second.status_code, other.status_code) == (200, 429, 200)
+
+
+def test_after_reply_runs_once_the_reply_is_sent_even_if_it_fails() -> None:
+    calls: list[str] = []
+
+    def flaky_flush() -> None:
+        calls.append("flush")
+        raise ConnectionError("langfuse is down")
+
+    app = build_app(_answering(_reply()), AskLimiter(100, 100), [ORIGIN], after_reply=flaky_flush)
+    events = _ask(TestClient(app))
+    assert events[-1][0] == "reply"
+    assert calls == ["flush"]

@@ -30,6 +30,8 @@ class Trace(Protocol):
 class Tracer(Protocol):
     def trace(self) -> AbstractContextManager[Trace]: ...
 
+    def flush(self) -> None: ...
+
 
 class _NoTrace:
     def stage(self, name: str) -> AbstractContextManager[None]:
@@ -47,6 +49,9 @@ class NoTracing:
 
     def trace(self) -> AbstractContextManager[Trace]:
         return nullcontext(_NoTrace())
+
+    def flush(self) -> None:
+        return None
 
 
 NO_TRACING = NoTracing()
@@ -70,6 +75,10 @@ class LangfuseTracer:
             raise
         finally:
             self.guard(lambda: _end(root))
+
+    def flush(self) -> None:
+        """Export buffered spans now; a serverless instance may be frozen after the response."""
+        self.guard(self._client.flush)
 
     def guard[T](self, action: Callable[[], T]) -> T | None:
         """`action()`, or None once any Langfuse call has failed."""
@@ -131,7 +140,8 @@ def _end(observation: Any) -> None:
 
 
 # NOTE: auth_check() raises the transport error when the host is down instead of returning
-# False, and flush() blocks for seconds, so we check once at startup and never flush per answer.
+# False, and flush() blocks for seconds, so we check once at startup and flush only after the
+# reply has been sent to the browser (D69).
 def build_tracer(settings: Settings) -> Tracer:
     """A Langfuse tracer if `LANGFUSE_TRACING` is on and the keys work, else `NO_TRACING`."""
     if not settings.langfuse_tracing:

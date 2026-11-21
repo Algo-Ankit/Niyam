@@ -596,3 +596,21 @@ Cloud Run needs a billing account with a card, and Koyeb asks for a card and cap
 requests at 120 s. *Tradeoff:* Render free sleeps after 15 idle minutes (about a minute to
 wake) and has no persistent disk, so the response cache, quota ledger and in-memory ask limits
 reset on every restart.
+
+**D69. Host the site and API together on Vercel; build, test and publish the container in CI.**
+Owner-approved on 2026-11-21. Supersedes D68's recommendation of Render and Cloudflare Pages
+(the Dockerfile, CI and runbook from D68 stay). One Vercel Hobby project serves the website as
+static files from `public/` (built from `web/`) and the FastAPI app as a Python function at
+`/api/*`, so the site and API share one origin and need no CORS. Production details:
+`STATE_DIR` is `/tmp` (the only writable path); the per-IP limit reads the client address from
+`CLIENT_IP_HEADER=x-real-ip`, which Vercel overwrites with the real client IP so it cannot be
+spoofed; Langfuse is flushed after the reply event and before the stream closes, because a
+serverless instance may be frozen once the response ends. CI builds the Docker image on every
+push, starts it and checks `GET /api/health`, and on `main` publishes it to GitHub Container
+Registry as `ghcr.io/algo-ankit/niyam-api` (tags: commit SHA and `latest`).
+*Why:* Render's free API sleeps after 15 idle minutes and takes about a minute to wake, which a
+visitor to a portfolio link will not wait for; Vercel serves the page instantly and starts the
+API in seconds, on an account the owner already has. The published container keeps the API
+portable to any container host. *Tradeoff:* ask limits and the response cache are per instance
+and reset when instances recycle, so they are approximate; Gemini's own free-tier quota remains
+the hard stop. Hobby is for personal, non-commercial use, which this project is.

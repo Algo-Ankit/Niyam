@@ -25,3 +25,6 @@ Thumbs.db
 
 # Local backups made before overwriting a file
 *.bak-*
+
+# Vercel build output: the website copied from web/dist (D69)
+/public/

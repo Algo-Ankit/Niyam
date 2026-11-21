@@ -111,22 +111,30 @@ def create_app() -> FastAPI:
     """The live app: real models, Postgres and limits from settings."""
     settings = get_settings()
     models = build_models(settings)
+    tracer = build_tracer(settings)
     return build_app(
-        _live_answerer(settings, models, build_tracer(settings)),
+        _live_answerer(settings, models, tracer),
         AskLimiter(settings.asks_per_ip_per_hour, settings.demo_daily_cap),
         settings.cors_origins,
         corpus_snapshot=last_modified_date(MANIFEST, ECFR_TITLE_8),
+        client_ip_header=settings.client_ip_header,
+        after_reply=tracer.flush,
         on_shutdown=models.close,
     )
 
 
-def build_app(
+def build_app(  # noqa: PLR0913  # each argument is a separate deployment concern
     answerer: Answerer,
     limiter: AskLimiter,
     cors_origins: list[str],
+    *,
     corpus_snapshot: date | None = None,
+    client_ip_header: str | None = None,
+    after_reply: Callable[[], None] = lambda: None,
     on_shutdown: Callable[[], None] = lambda: None,
 ) -> FastAPI:
+    """The app. `after_reply` runs once the reply or error is sent, before the stream closes."""
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
@@ -147,15 +155,14 @@ def build_app(
 
     @app.post("/api/ask")
     def ask(body: AskRequest, request: Request) -> StreamingResponse:
-        client = request.client.host if request.client else "unknown"
-        refusal = limiter.admit(client)
+        refusal = limiter.admit(_client_ip(request, client_ip_header))
         if refusal is not None:
             raise HTTPException(
                 status_code=429,
                 detail=refusal.message,
                 headers={"Retry-After": str(refusal.retry_after_seconds)},
             )
-        events = _events(answerer, body.message, body.as_of or date.today())
+        events = _events(answerer, body.message, body.as_of or date.today(), after_reply)
         return StreamingResponse(
             events,
             media_type="text/event-stream",
@@ -184,7 +191,19 @@ def _live_answerer(settings: Settings, models: ModelSuite, tracer: Tracer) -> An
     return answer
 
 
-def _events(answerer: Answerer, message: str, as_of: date) -> Iterator[str]:
+# NOTE: `client_ip_header` must name a header the platform overwrites (Vercel sets `x-real-ip`
+# to the real client address); a header a client can set would let it dodge the per-IP limit.
+def _client_ip(request: Request, client_ip_header: str | None) -> str:
+    if client_ip_header:
+        value = request.headers.get(client_ip_header, "").split(",")[0].strip()
+        if value:
+            return value
+    return request.client.host if request.client else "unknown"
+
+
+def _events(
+    answerer: Answerer, message: str, as_of: date, after_reply: Callable[[], None]
+) -> Iterator[str]:
     """Runs the answerer in a thread and yields its stages, then the reply or an error."""
     events: queue.Queue[str | None] = queue.Queue()
 
@@ -201,6 +220,10 @@ def _events(answerer: Answerer, message: str, as_of: date) -> Iterator[str]:
             _log.exception("ask failed")
             events.put(_sse("error", {"code": "internal", "message": INTERNAL}))
         finally:
+            try:
+                after_reply()
+            except Exception:
+                _log.exception("after-reply hook failed")
             events.put(None)
 
     threading.Thread(target=work, daemon=True).start()
