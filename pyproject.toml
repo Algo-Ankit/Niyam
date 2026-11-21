@@ -70,7 +70,3 @@ files = ["src", "tests"]
 testpaths = ["tests"]
 pythonpath = ["tests"]
 addopts = "-ra --strict-markers"
-
-[tool.vercel]
-# Vercel imports this module-level app (D69); containers use `niyam.api:create_app --factory`.
-entrypoint = "niyam.asgi:app"

@@ -4,7 +4,7 @@
     "api": {
       "root": ".",
       "framework": "fastapi",
-      "entrypoint": "niyam.asgi:app",
+      "entrypoint": "src.niyam.asgi:app",
       "functions": {
         "src/niyam/asgi.py": {
           "maxDuration": 60,
