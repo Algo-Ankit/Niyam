@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -199,3 +201,36 @@ def test_after_reply_runs_once_the_reply_is_sent_even_if_it_fails() -> None:
     events = _ask(TestClient(app))
     assert events[-1][0] == "reply"
     assert calls == ["flush"]
+
+
+def test_an_ask_past_its_deadline_ends_with_busy_instead_of_hanging() -> None:
+    release = threading.Event()
+
+    def stuck(message: str, as_of: date, on_stage: pipeline.StageCallback) -> pipeline.Reply:
+        on_stage("extract", 3)
+        release.wait(5)  # a provider that never answers
+        return _reply()
+
+    app = build_app(stuck, AskLimiter(100, 100), [ORIGIN], deadline_seconds=0.2)
+    try:
+        events = _ask(TestClient(app))
+    finally:
+        release.set()
+    assert [name for name, _ in events] == ["stage", "error"]
+    assert events[-1][1] == {"code": "busy", "message": BUSY}
+
+
+def test_a_reply_sent_in_time_is_not_followed_by_busy_when_cleanup_runs_late() -> None:
+    def slow_flush() -> None:
+        time.sleep(0.4)
+
+    app = build_app(
+        _answering(_reply()),
+        AskLimiter(100, 100),
+        [ORIGIN],
+        deadline_seconds=0.2,
+        after_reply=slow_flush,
+    )
+    events = _ask(TestClient(app))
+    assert events[-1][0] == "reply"
+    assert all(name != "error" for name, _ in events)

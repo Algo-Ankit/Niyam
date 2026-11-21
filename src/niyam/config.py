@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     # Header the host overwrites with the real client IP (Vercel: x-real-ip). Unset: the TCP peer.
     client_ip_header: str | None = None
+    # Seconds before an unfinished ask ends with "busy"; keep below the host's request limit
+    # (Vercel maxDuration 60 s in vercel.json), which otherwise cuts the stream silently (D71).
+    ask_deadline_seconds: float = Field(default=50.0, gt=0)
 
     # Local state: response cache and cost/quota ledger.
     state_dir: Path = Path(".state")

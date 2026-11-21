@@ -627,3 +627,13 @@ uses the same origin.
 service is built by its own framework preset instead of copying the site into the API's
 `public/` folder. *Tradeoff:* Services is a newer Vercel feature, so the first deploy is the
 real check of this configuration.
+
+**D71. End an ask with "busy" after a 50-second deadline instead of letting the host cut it.**
+Owner-approved on 2026-11-21 (fix found in the first live Vercel test). `POST /api/ask` now ends
+the stream with the generic "busy" error if no reply or error has arrived within
+`ASK_DEADLINE_SECONDS` (default 50), which must stay below the host's request limit (Vercel
+`maxDuration` 60 s). An ask that already sent its reply is never followed by "busy".
+*Why:* in the first production ask, Gemini answered `503` twice, each after about 30 s, and the
+D55 retries ran past Vercel's 60 s limit; the platform killed the function and the visitor got an
+empty stream with no message. *Tradeoff:* an answer that would have finished between 50 s and
+the retry budget is reported as busy; the visitor can retry, and cached steps replay free.

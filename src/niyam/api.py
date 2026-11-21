@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from time import monotonic
 from typing import Any
 
 import psycopg
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
         settings.cors_origins,
         corpus_snapshot=last_modified_date(MANIFEST, ECFR_TITLE_8),
         client_ip_header=settings.client_ip_header,
+        deadline_seconds=settings.ask_deadline_seconds,
         after_reply=tracer.flush,
         on_shutdown=models.close,
     )
@@ -130,6 +132,7 @@ def build_app(  # noqa: PLR0913  # each argument is a separate deployment concer
     *,
     corpus_snapshot: date | None = None,
     client_ip_header: str | None = None,
+    deadline_seconds: float = 50.0,
     after_reply: Callable[[], None] = lambda: None,
     on_shutdown: Callable[[], None] = lambda: None,
 ) -> FastAPI:
@@ -162,7 +165,9 @@ def build_app(  # noqa: PLR0913  # each argument is a separate deployment concer
                 detail=refusal.message,
                 headers={"Retry-After": str(refusal.retry_after_seconds)},
             )
-        events = _events(answerer, body.message, body.as_of or date.today(), after_reply)
+        events = _events(
+            answerer, body.message, body.as_of or date.today(), after_reply, deadline_seconds
+        )
         return StreamingResponse(
             events,
             media_type="text/event-stream",
@@ -202,9 +207,16 @@ def _client_ip(request: Request, client_ip_header: str | None) -> str:
 
 
 def _events(
-    answerer: Answerer, message: str, as_of: date, after_reply: Callable[[], None]
+    answerer: Answerer,
+    message: str,
+    as_of: date,
+    after_reply: Callable[[], None],
+    deadline_seconds: float,
 ) -> Iterator[str]:
-    """Runs the answerer in a thread and yields its stages, then the reply or an error."""
+    """Runs the answerer in a thread and yields its stages, then the reply or an error.
+
+    If no reply or error arrives within `deadline_seconds`, the stream ends with a "busy" error.
+    """
     events: queue.Queue[str | None] = queue.Queue()
 
     def on_stage(stage: pipeline.Stage, ms: int) -> None:
@@ -227,7 +239,20 @@ def _events(
             events.put(None)
 
     threading.Thread(target=work, daemon=True).start()
-    while (event := events.get()) is not None:
+    deadline = monotonic() + deadline_seconds
+    answered = False
+    while True:
+        try:
+            event = events.get(timeout=max(0.0, deadline - monotonic()))
+        except queue.Empty:
+            # The host kills the request at its own limit with no message; end it first, politely.
+            if not answered:
+                _log.warning("ask exceeded its %.0f s deadline", deadline_seconds)
+                yield _sse("error", {"code": "busy", "message": BUSY})
+            return
+        if event is None:
+            return
+        answered = answered or event.startswith(("event: reply", "event: error"))
         yield event
 
 
