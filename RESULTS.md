@@ -137,25 +137,6 @@ Format:
   response cache on; eval set evals/independent/h1b_cases.jsonl (70 cases, 1 run).
 - Raw output: results/edge-h1b-1.json
 
-## R12 2026-11-21 - Independent edge-cases eval (90 cases)
-- Value: passed 0.221 across 90 cases (judge_failed 4: x022, x045, x057, x061). Per-group pass
-  rates: category:adversarial 0.444 (9 cases, judge_failed 0); category:cap_gap 0.143 (9 cases,
-  judge_failed 2); category:date_boundaries 0.2 (15 cases, judge_failed 0);
-  category:messy_language 0.111 (9 cases, judge_failed 0); category:missing_or_contradictory_facts
-  0.143 (7 cases, judge_failed 0); category:scope_boundaries 0.0 (11 cases, judge_failed 0);
-  category:silent_regulation 0.125 (8 cases, judge_failed 0); category:stem_opt 0.25 (9 cases,
-  judge_failed 1); category:unemployment_counting 0.5 (13 cases, judge_failed 1); confidence:high
-  0.333 (46 cases, judge_failed 1); confidence:medium 0.091 (35 cases, judge_failed 2);
-  confidence:low 0.125 (9 cases, judge_failed 1); unambiguous 0.27 (66 cases, judge_failed 3);
-  ambiguous 0.087 (24 cases, judge_failed 1). Overall metrics: scope_ok 0.867, deadlines_ok
-  0.571, counts_ok 0.947, asks_ok 1.0, cites_gold 0.851, no_leak 1.0, says_required 0.326,
-  avoids_forbidden 0.942.
-- Produced by: `uv run niyam eval-edge results/edge-cases-1.json --set
-  evals/independent/edge_cases.jsonl` at commit 2640fdb
-- Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
-  response cache on; eval set evals/independent/edge_cases.jsonl (90 cases, 1 run).
-- Raw output: results/edge-cases-1.json
-
 ## R12 2026-11-20 - Retrieval held-out test split (35 questions), vector vs vector + rerank
 - Value: hit@1 / hit@3 / hit@5 / MRR@10. vector 0.886 / 0.943 / 0.943 / 0.917; vector+rerank
   1.000 / 1.000 / 1.000 / 1.000. Paired 95% bootstrap, rerank minus vector: hit@1 +0.114
@@ -213,3 +194,22 @@ Format:
   cache on; eval set evals/retrieval-dev.jsonl (40 questions with reference answers, gold and
   context provisions passed directly, 1 run; builder-written, judge uncalibrated).
 - Raw output: results/answers-1.json
+
+## R16 2026-11-21 - Provisional model-vs-model audit of gemma-4-31b-it judge verdicts (30 stratified cases) and builder-written gold sets (150 items)
+- Value: across 30 stratified verdicts sampled (`seed=42`) from R10–R15 (6 decline/security, 6 H-1B,
+  8 edge cases, 4 pipeline, 6 answers), overall exact verdict agreement is 0.667 (20 of 30) and
+  individual-dimension agreement is 0.817 (49 of 60): edge `says_required` 0.750 (15/20, kappa
+  0.500), `avoids_forbidden` 0.850 (17/20, kappa -0.071); QA `correct` 0.800 (8/10, kappa 0.583),
+  `grounded` 0.900 (9/10, kappa 0.000). Disagreements: 6 Gemma-more-lenient (`y008`, `x005`, `x010`,
+  `x021`, `p25`, `d34`), 4 Gemma-stricter (`h006`, `h022`, `x052`, `p20`). Companion read-only
+  audit of all 150 items across the 4 builder-written sets (`retrieval-dev`, `retrieval-test`,
+  `extraction`, `pipeline`): 127 clean, 4 high (missing `context` in `retrieval-dev.jsonl` on
+  `d07`, `d12`, `d15`, `d31` causing all 4 R15 false abstentions), 4 medium, 15 low. Note:
+  provisional automated audit by Gemini planning subagents (not human/owner calibration, not Claude
+  Opus), pending owner spot-check.
+- Produced by: read-only blind audit over `results/edge-decline-1.json`, `results/edge-h1b-1.json`,
+  `results/edge-cases-1.json`, `results/pipeline-1.json`, `results/answers-1.json`, and
+  `evals/*.jsonl` at commit a642298
+- Config: Gemini planning subagents auditing `gemma-4-31b-it` verdicts (N=30, `seed=42`) and
+  8 CFR 214.2(f) gold sets (N=150); no evals re-run.
+- Raw output: results/judge-audit-1.json, results/gold-audit-1.json

@@ -1,0 +1,214 @@
+{
+  "run_at": "2026-11-21T13:39:42+00:00",
+  "commit": "a642298",
+  "provisional": true,
+  "owner_reviewed": false,
+  "auditor_model": "gemini-planning-subagent",
+  "note": "Provisional read-only audit of all 150 items across the 4 builder-written eval sets against 8 CFR 214.2(f); no eval sets were edited so R5-R15 remain untouched.",
+  "summary": {
+    "total": 150,
+    "clean": 127,
+    "high": 4,
+    "medium": 4,
+    "low": 15,
+    "by_set": {
+      "evals/retrieval-dev.jsonl": {"items": 60, "clean": 50, "high": 4, "medium": 2, "low": 4, "flagged": 10},
+      "evals/retrieval-test.jsonl": {"items": 35, "clean": 32, "high": 0, "medium": 1, "low": 2, "flagged": 3},
+      "evals/extraction.jsonl": {"items": 15, "clean": 10, "high": 0, "medium": 0, "low": 5, "flagged": 5},
+      "evals/pipeline.jsonl": {"items": 40, "clean": 35, "high": 0, "medium": 1, "low": 4, "flagged": 5}
+    }
+  },
+  "synthesis": [
+    "Factual accuracy of individual gold items is high after D59/D60b (0 wrong dates, day counts, out-of-scope labels, or invalid CFR citations), except 4 missing context entries in retrieval-dev.jsonl (d07, d12, d15, d31) caused all 4 reported false abstentions in R15; true generator correctness error rate on R15 is 2/40 (d01, d40).",
+    "R14 (pipeline-1) is mostly accurate on individual items, with 1 of 3 misses (p20) driven by a phrasing clash and 2 (p01, p29) genuine guardrail misses; however, 10 of 15 extraction.jsonl messages (plus 1-word-diff e01/p01) appear verbatim in pipeline.jsonl, inflating R14 deadlines_agree.",
+    "R5/R6 (extraction.jsonl, 15 items) predates D51 (cap-gap), D52 (related_to_major, hours_per_week), D58 (jobs=None vs []), and D72 (kind) and has 0 coverage of those fields.",
+    "Retrieval scores (R4, R7-R9, R12) are directionally trustworthy; R12's vector hit@1 gain over R8 (0.857 -> 0.886) matches D59 adding (f)(10)(ii)(C)(2) to r19, though 20/60 dev items share a gold citation with retrieval-test.jsonl.",
+    "Bottom line for v2: fix the 4 high context bugs (d07, d12, d15, d31) plus d34/p20, fix _stem_filing_window's un-clamped summary in opt.py, and build a fresh held-out extraction/pipeline v2 split."
+  ],
+  "flagged": [
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d07",
+      "severity": "high",
+      "issue": "Trailing-colon gold provision missing child provisions in context; incomplete reference",
+      "evidence": "8 CFR 214.2(f)(7)(i) ends 'if it is established that the student:' with mandatory criteria in (f)(7)(i)(A)-(C)(2)(iii). Empty context gave R15 eval-answers a truncated provision, directly causing a justified abstention (answerable=False, correct=False, grounded=False); reference also omits full-course-of-study and compelling academic/medical/beyond-control criteria.",
+      "suggested_v2_action": "Add 8 CFR 214.2(f)(7)(i)(A) through (C)(2)(iii) to context (keep gold=['8 CFR 214.2(f)(7)(i)']) and expand reference to summarize those criteria."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d12",
+      "severity": "high",
+      "issue": "Missing cross-referenced provision in context leaves 'economic hardship' ungrounded in eval-answers",
+      "evidence": "format_provisions() omits headings, and the body of 8 CFR 214.2(f)(9)(ii)(A) never uses the words 'economic hardship'—it only cross-references 'paragraph (f)(9)(ii)(C)'. With context=[], the R15 generator honestly abstained (answerable=False, cites_gold=False, correct=False, grounded=True).",
+      "suggested_v2_action": "Add context=['8 CFR 214.2(f)(9)(ii)(C)'] (keep gold=['8 CFR 214.2(f)(9)(ii)(A)']) and optionally note full-time work during holidays/vacations in reference."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d15",
+      "severity": "high",
+      "issue": "Bare semicolon list-item fragment missing parent stem in context (missed in D60b)",
+      "evidence": "8 CFR 214.2(f)(10)(ii)(A)(1) begins 'During the student's annual vacation...' and ends ';', never mentioning OPT or optional practical training (supplied by parent (f)(10)(ii)(A)). With context=[] and no headings, R15 honestly abstained (answerable=False, cites_gold=False, correct=False, grounded=True).",
+      "suggested_v2_action": "Add context=['8 CFR 214.2(f)(10)(ii)(A)'] per D60b, keeping gold=['8 CFR 214.2(f)(10)(ii)(A)(1)']."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d31",
+      "severity": "high",
+      "issue": "Missing reinstatement conditions (B)-(F)(2) in context (broke R15) and arbitrary single bare fragment (A) in retrieval gold (violates D60b)",
+      "evidence": "(f)(16)(i) ends 'if the student:'; R15 only received (f)(16)(i) and (A), triggering a justified abstention (answerable=False, correct=False, grounded=True) for missing conditions (B)-(F)(2). In retrieval gold, including bare fragment (A) while excluding sibling fragments (B)-(F) violates D60b and connects to R9's sole rerank miss (reranker put (D) and (B) ahead of (A)).",
+      "suggested_v2_action": "Set gold=['8 CFR 214.2(f)(16)(i)'], put (f)(16)(i)(A) through (F)(2) in context, and update reference to summarize all core reinstatement criteria."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d34",
+      "severity": "medium",
+      "issue": "Incomplete context omits (f)(5)(vii)(C); reference glosses unquoted statutory citations; personal phrasing triggered R15 answerable=False",
+      "evidence": "(f)(5)(vii)(A) cites INA 214(g)(1)(A) and 8 CFR 274a.12(c)(3)(i)(B)-(C) without spelling out 'cap-subject' or 'OPT', and (f)(5)(vii)(C) adds the mandatory status-maintenance requirement. In R15, 'If my employer filed an H-1B for me, is my F-1 status extended...' caused answerable=False (while correct=True) because no petition details were given.",
+      "suggested_v2_action": "Add 8 CFR 214.2(f)(5)(vii)(C) (and optionally (B)) to context and rephrase the question as a general rule question."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d55",
+      "severity": "medium",
+      "issue": "Missing co-valid STEM OPT reporting paragraph (f)(12)(ii)(A) on an unqualified 'OPT' question",
+      "evidence": "Question 'Do I have to tell my DSO if my OPT job ends early?' does not restrict to initial OPT; gold only has (f)(12)(i) ('interruption of such employment'), omitting (f)(12)(ii)(A) ('loss of employment' within 10 days on STEM OPT). Inconsistent with D59's fix on r05.",
+      "suggested_v2_action": "Add 8 CFR 214.2(f)(12)(ii)(A) to gold or narrow the question to initial post-completion OPT."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d14",
+      "severity": "low",
+      "issue": "Reference omits Form I-20 DSO certification and Form I-765/fee required by (f)(9)(iii)",
+      "evidence": "Question asks 'how do I get work authorization?' for an international organization; (f)(9)(iii) requires written org certification, DSO-completed Form I-20, and Form I-765 with fee, whereas reference mentions only applying to USCIS with the written certification.",
+      "suggested_v2_action": "Expand reference in v2 to include the DSO-endorsed Form I-20 and Form I-765 with required fee."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d38",
+      "severity": "low",
+      "issue": "Trailing-colon provision (f)(5)(i) omits exception children (f)(5)(i)(A)-(E) from context",
+      "evidence": "(f)(5)(i) ends 'subject to the following exceptions:' (24-month language-program cap in (A), 12-month public high school cap in (C), etc.). R15 passed because the 4-year rule precedes the colon, but empty context is fragile.",
+      "suggested_v2_action": "Add 8 CFR 214.2(f)(5)(i)(A) through (E) to context in v2."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d44",
+      "severity": "low",
+      "issue": "Question asks about 'unpaid' STEM OPT, which (f)(10)(ii)(C)(8) addresses only via 'commensurate compensation'",
+      "evidence": "Words 'unpaid' and 'volunteer' never appear in 8 CFR 214.2(f); (f)(10)(ii)(C)(8) is the right retrieval paragraph (sole STEM compensation rule) but requires compensation commensurate with similarly situated U.S. workers rather than literally banning unpaid work.",
+      "suggested_v2_action": "Keep (f)(10)(ii)(C)(8) for retrieval; if adding a reference in v2, ground strictly in commensurate compensation."
+    },
+    {
+      "set": "retrieval-dev.jsonl",
+      "id": "d57",
+      "severity": "low",
+      "issue": "Bare semicolon fragment (f)(10)(ii)(A)(2) lacks parent stem if ever given a reference",
+      "evidence": "(f)(10)(ii)(A)(2) says 'While school is in session, provided that practical training does not exceed 20 hours a week...; or' without mentioning OPT; works in retrieval via indexed headings but mirrors d15 if promoted to eval-answers.",
+      "suggested_v2_action": "Add context=['8 CFR 214.2(f)(10)(ii)(A)'] if a reference is ever added."
+    },
+    {
+      "set": "retrieval-test.jsonl",
+      "id": "r12",
+      "severity": "medium",
+      "issue": "Missing co-valid STEM OPT address-reporting paragraph (f)(12)(ii)(A) on unqualified 'OPT' question",
+      "evidence": "Question 'I moved apartments while on OPT, who do I need to tell?' does not exclude STEM OPT; gold includes (f)(12)(i) and (f)(17) but omits (f)(12)(ii)(A) (report residential/mailing address to DSO within 10 days during STEM OPT), unlike D59's r05 fix.",
+      "suggested_v2_action": "In a v2 test set (keeping v1 frozen for longitudinal comparability), add 8 CFR 214.2(f)(12)(ii)(A) or narrow question to initial OPT."
+    },
+    {
+      "set": "retrieval-test.jsonl",
+      "id": "r24",
+      "severity": "low",
+      "issue": "Bare fragment (f)(10)(ii)(A)(2) and near-duplicate of dev item d57",
+      "evidence": "'Can I do OPT part-time while I am still taking classes?' paraphrases d57 ('Can I work on OPT while classes are in session before I graduate?') targeting the same single bare-fragment paragraph, weakening dev/test independence.",
+      "suggested_v2_action": "Replace with a non-overlapping held-out question in v2; add parent context if ever used for answer eval."
+    },
+    {
+      "set": "retrieval-test.jsonl",
+      "id": "r32",
+      "severity": "low",
+      "issue": "Question asks about physical EAD receipt while gold paragraphs regulate EAD start date; (f)(10)(ii)(D) also co-valid",
+      "evidence": "(f)(11)(i)(D) and (f)(10)(ii)(A) prohibit starting before the approved start date on Form I-766 (with STEM exception in (f)(11)(i)(C)); (f)(10)(ii)(D) separately prohibits post-completion OPT unless employment authorization is granted.",
+      "suggested_v2_action": "Tighten question wording to 'before my OPT EAD start date or approval' and consider adding (f)(10)(ii)(D) in v2."
+    },
+    {
+      "set": "extraction.jsonl",
+      "id": "e04",
+      "severity": "low",
+      "issue": "Strict scalar-field scoring ambiguity on implied on_stem_extension (None vs False)",
+      "evidence": "'When can I file for the STEM extension?' implies the student is not yet on STEM OPT; gold leaves on_stem_extension=None, so an extractor returning False fails all_fields_correct in extraction.py even though deadlines_agree is identical.",
+      "suggested_v2_action": "Keep None convention explicit in prompt or treat None/False as equivalent on non-approved STEM questions in v2 scorer."
+    },
+    {
+      "set": "extraction.jsonl",
+      "id": "e05",
+      "severity": "low",
+      "issue": "Strict scalar-field scoring ambiguity on implied stem_degree (None vs True) when on_stem_extension=True",
+      "evidence": "'My STEM OPT extension was approved' entails a qualifying STEM degree (current or prior), yet gold leaves stem_degree=None; returning True fails field scoring despite identical findings (and opt.py still lists stem_degree as missing).",
+      "suggested_v2_action": "Clarify in extraction prompt whether approved STEM OPT implies stem_degree=True or stays null unless explicitly stated, and keep gold consistent."
+    },
+    {
+      "set": "extraction.jsonl",
+      "id": "e10",
+      "severity": "low",
+      "issue": "Strict job-span scoring ambiguity on 'until now' (end=None vs end=as_of)",
+      "evidence": "'at Delta from 2027-02-01 until now' has gold end=None (ongoing); an extractor outputting end='2027-03-01' (as_of) yields the exact same 45 unemployment days but fails _job_spans equality.",
+      "suggested_v2_action": "Rephrase as 'and still work there' (like e05) or normalize end==as_of in v2."
+    },
+    {
+      "set": "extraction.jsonl",
+      "id": "e12",
+      "severity": "low",
+      "issue": "Strict scalar-field scoring ambiguity on implied on_stem_extension (None vs False)",
+      "evidence": "'Can I get the STEM extension?' implies not on STEM extension; gold leaves on_stem_extension=None, matching e04.",
+      "suggested_v2_action": "Same as e04: keep convention explicit or relax None/False equivalence when no extension is approved."
+    },
+    {
+      "set": "extraction.jsonl",
+      "id": "e13",
+      "severity": "low",
+      "issue": "Strict scalar-field scoring ambiguity on implied stem_degree (None vs True) when on_stem_extension=True",
+      "evidence": "'I'm on an approved STEM OPT extension' leaves stem_degree=None in gold, matching e05.",
+      "suggested_v2_action": "Same as e05: clarify extraction convention for implied stem_degree on approved STEM OPT."
+    },
+    {
+      "set": "pipeline.jsonl",
+      "id": "p20",
+      "severity": "medium",
+      "issue": "Imprecise opening date in reference ('Between 2027-03-02 and 2027-05-14') and clash with opt.py summary triggered R14 false-negative miss",
+      "evidence": "Under 8 CFR 214.2(f)(11)(ii)(B), the student could not file before the 2027-03-15 DSO recommendation (and as_of=2027-03-20). Meanwhile opt.py _stem_filing_window outputs 'from 2027-03-02 to 2027-05-31, and within 60 days of the DSO recommendation (by 2027-05-14)'; when the R14 generator echoed that verbatim, Gemma judged it incorrect against 'Between 2027-03-02 and 2027-05-14' despite deadlines_agree=True and grounded=True.",
+      "suggested_v2_action": "Update p20 reference to mirror p10 ('File by 2027-05-14, within 60 days of the 2027-03-15 DSO recommendation; the general 90-day window opened 2027-03-02'), and fix _stem_filing_window summary in opt.py to show the clamped close date."
+    },
+    {
+      "set": "pipeline.jsonl",
+      "id": "p05",
+      "severity": "low",
+      "issue": "Reference encodes opt.py's 3-report convention (dropping 24-month validation report under D44(4))",
+      "evidence": "Because D44(4) sets STEM end to 2029-05-31 and 24 months from 2027-06-01 is 2029-06-01 > end, opt.py omits a 4th (24-month) validation report; SEVP guidance normally includes a 24-month validation report.",
+      "suggested_v2_action": "Keep aligned with D44(4) if intentional, or explicitly document/accept both 3-report (strict CFR) and 4-report (SEVP 24-month) interpretations in v2."
+    },
+    {
+      "set": "pipeline.jsonl",
+      "id": "p15",
+      "severity": "low",
+      "issue": "Reference date 2028-06-11 inherits opt.py's 1-day convention mismatch vs D44(4)",
+      "evidence": "D44(4) treats a 24-month period starting 2027-06-01 as ending 2029-05-31 (day-before), which would end the 12-month evaluation period on 2028-05-31 (+10 days = 2028-06-10), whereas opt.py line 279 uses add_months(start, 12)+10d = 2028-06-11 and p15 mirrors it.",
+      "suggested_v2_action": "Reconcile the 12-month end-date convention between D44(4), opt.py, and p15 (preferring cautious 2028-06-10 or allowing both in v2)."
+    },
+    {
+      "set": "pipeline.jsonl",
+      "id": "p25",
+      "severity": "low",
+      "issue": "Unqualified OPT job-interruption question omits STEM OPT reporting paragraph (f)(12)(ii)(A) from gold",
+      "evidence": "Question 'Do I need to tell my DSO if my OPT job is interrupted?' targets (f)(12)(i)'s exact wording ('interruption of such employment'), so (f)(12)(i) is primary, but (f)(12)(ii)(A) also applies if on STEM OPT.",
+      "suggested_v2_action": "Optionally add 8 CFR 214.2(f)(12)(ii)(A) to gold in v2."
+    },
+    {
+      "set": "pipeline.jsonl",
+      "id": "p28",
+      "severity": "low",
+      "issue": "Reference omits timely-filed STEM OPT pending-EAD exception cross-referenced in (f)(11)(i)(D)",
+      "evidence": "(f)(11)(i)(D) states 'except as described in paragraph (f)(11)(i)(C)' (automatic extension while STEM extension is pending); reference gives an unqualified 'No' for initial OPT.",
+      "suggested_v2_action": "Narrow question to initial post-completion OPT or mention the STEM extension exception in reference."
+    }
+  ]
+}

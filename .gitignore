@@ -26,3 +26,8 @@ Thumbs.db
 # Local backups made before overwriting a file
 *.bak-*
 
+# Temporary console logs from background eval runs
+results/*.log
+results/*.started-at
+
+
