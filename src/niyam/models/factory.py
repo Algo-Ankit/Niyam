@@ -59,7 +59,9 @@ def build_models(settings: Settings, *, use_cache: bool = True) -> ModelSuite:
         ),
     )
     generator: GenerativeModel = MeteredGenerativeModel(
-        GeminiGenerativeModel(client, settings.generation_model),
+        GeminiGenerativeModel(
+            client, settings.generation_model, settings.generation_timeout_seconds
+        ),
         Meter(
             GEMINI,
             settings.generation_model,

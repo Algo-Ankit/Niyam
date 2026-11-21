@@ -63,6 +63,8 @@ class Settings(BaseSettings):
         requests_per_minute=100, tokens_per_minute=30_000, requests_per_day=1_000
     )
     max_rate_limit_retries: int = Field(default=3, ge=0)  # D55; also covers 5xx
+    # Per-call limit for the answer model; a timeout is retried like a 503 (D73).
+    generation_timeout_seconds: float = Field(default=15.0, gt=0)
 
     # Observability and storage.
     langfuse_public_key: SecretStr

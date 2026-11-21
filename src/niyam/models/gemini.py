@@ -4,6 +4,7 @@ Behaviours verified against live calls on 2026-11-14 (see docs/providers.md):
 - Decisions return answers keyed by question name in arbitrary order; `noul` is P(yes).
 - Generation models (gemini-3.5-flash-lite by default) are called through the Interactions API
   with `thinking_level`.
+- `interactions.create(timeout=seconds)` raises compat_errors.APITimeoutError when it expires.
 - gemini-embedding-2 aggregates a plain list of strings into ONE vector; each text must be
   wrapped in its own `Content` to get one vector per text. It has no `task_type`; the task
   is expressed with documented text prefixes.
@@ -86,6 +87,8 @@ def _transient_errors_translated(model_id: str) -> Iterator[None]:
     except compat_errors.APIStatusError as error:
         _raise_if_transient(model_id, error.status_code, error)
         raise
+    except compat_errors.APITimeoutError as error:
+        raise ProviderUnavailableError(f"{model_id}: Gemini API call timed out") from error
 
 
 def _raise_if_transient(model_id: str, status: int | None, error: Exception) -> None:
@@ -124,9 +127,12 @@ class GeminiDecisionModel:
 
 
 class GeminiGenerativeModel:
-    def __init__(self, client: genai.Client, model_id: str) -> None:
+    def __init__(
+        self, client: genai.Client, model_id: str, timeout_seconds: float | None = None
+    ) -> None:
         self._client = client
         self._model_id = model_id
+        self._timeout_seconds = timeout_seconds  # None: the SDK default (no per-call limit)
 
     @property
     def model_id(self) -> str:
@@ -143,6 +149,7 @@ class GeminiGenerativeModel:
             raw = self._client.interactions.create(
                 model=self._model_id,
                 input=request.prompt,
+                timeout=self._timeout_seconds,
                 **thinking,
                 response_format={
                     "type": "text",

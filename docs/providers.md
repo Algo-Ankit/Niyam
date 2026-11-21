@@ -58,6 +58,11 @@ hydrogen 5 RPM, 250K TPM, **20 RPD**; 3.5-flash-lite 15 RPM, 250K TPM, **500 RPD
 decisions 200 RPM, 50K TPM, 10K RPD. `gemini-3.5-flash` was not in the pasted list
 and is not on the pricing page, so it is not used.
 
+Per-call timeout (D73, live 2026-11-21, google-genai 3.3.0): `interactions.create` takes
+`timeout` in seconds; `timeout=0.3` raised `compat_errors.APITimeoutError` after 0.4 s, and
+`timeout=20` answered a short prompt in 8.9 s. `decisions.create` has no `timeout` argument.
+In production a 503 arrived after about 30 s.
+
 Not chosen: `gemini-4-hydrogen` took 8.2 to 36.4 s (R1; earlier manual probes saw 30 to 76 s).
 `gemini-3.7-flash` and `gemini-3.8-flash` took 63 to 226 s and wrongly abstained on one
 answerable question (R1). Three questions per model is a smoke test, not a quality comparison.

@@ -114,6 +114,24 @@ def test_interactions_api_client_errors_propagate_unchanged() -> None:
         GeminiGenerativeModel(client, "h").generate(GenerationRequest("p", Answer, "low"))
 
 
+def test_interactions_timeout_is_a_retryable_unavailable_error() -> None:
+    request = httpx.Request("POST", "https://example.invalid")
+
+    def create(**_: Any) -> None:
+        raise compat_errors.APITimeoutError(request=request)
+
+    client = stub_client(interactions=SimpleNamespace(create=create))
+    with pytest.raises(ProviderUnavailableError, match="timed out"):
+        GeminiGenerativeModel(client, "h", 15.0).generate(GenerationRequest("p", Answer, "low"))
+
+
+def test_generation_sends_its_timeout() -> None:
+    sent: dict[str, Any] = {}
+    client = stub_client(interactions=interactions_returning('{"answer": "x"}', sent))
+    GeminiGenerativeModel(client, "h", 15.0).generate(GenerationRequest("p", Answer, "low"))
+    assert sent["timeout"] == 15.0
+
+
 class Answer(BaseModel):
     answer: str
 

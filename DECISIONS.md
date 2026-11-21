@@ -637,3 +637,17 @@ the stream with the generic "busy" error if no reply or error has arrived within
 D55 retries ran past Vercel's 60 s limit; the platform killed the function and the visitor got an
 empty stream with no message. *Tradeoff:* an answer that would have finished between 50 s and
 the retry budget is reported as busy; the visitor can retry, and cached steps replay free.
+
+**D73. Give each answer-model call a 15-second timeout, retried like a 503.**
+Owner-approved on 2026-11-21. The generator's Interactions call is sent with
+`timeout=GENERATION_TIMEOUT_SECONDS` (default 15 s). A timeout is raised as
+`ProviderUnavailableError`, so the D55 retries treat it like a 503. The judge (evals only) and
+the decision and embedding calls keep no timeout. Verified live on 2026-11-21 with
+google-genai 3.3.0: `interactions.create(timeout=0.3)` raised
+`compat_errors.APITimeoutError` after 0.4 s; with 20 s a short prompt answered in 8.9 s.
+*Why:* in production, each Gemini 503 took about 30 s to arrive, so one failed call used most
+of the 50 s ask deadline (D71) and no retry could finish. With 15 s, a slow or failing call is
+abandoned early and up to two more attempts fit inside the deadline. *Tradeoff:* a generator
+call that would have succeeded after 15 s is cut and retried; the locally measured 8.9 s for a
+tiny prompt shows headroom is not large, so the value is a setting and is checked again in the
+live test.

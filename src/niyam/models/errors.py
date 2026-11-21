@@ -14,7 +14,7 @@ class RateLimitedError(ModelError):
 
 
 class ProviderUnavailableError(ModelError):
-    """The provider failed temporarily (HTTP 5xx, e.g. 503 high demand); a retry may succeed."""
+    """The provider failed temporarily (HTTP 5xx or a timeout); a retry may succeed."""
 
 
 class QuotaExhaustedError(ModelError):
