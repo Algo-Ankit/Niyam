@@ -17,9 +17,10 @@ code checks the model's output before anyone sees it.
 **Live demo:** https://niyam-flame.vercel.app (free-tier models; "Watch a recorded answer"
 works even when the daily quota is used up).
 
-**Status:** in development. The web app, the `niyam ask` CLI and the API are live. Retrieval
-(with reranking), fact extraction, and the independent decline/security evaluation (R10) have
-been measured. The remaining pipeline evaluations and prompt iterations are next.
+**Status:** live MVP with complete baseline evaluations (R4–R15). The web app, `niyam ask` CLI,
+and streaming API are live, and all retrieval, extraction, answer-quality, whole-pipeline, and
+independent edge/H-1B/security baselines have been measured. Judge calibration and prompt/rules
+iterations on the R11/R13 misses are next.
 
 ---
 
@@ -129,11 +130,61 @@ Adding `gemini-decision-1` reranking over the top 10 vector candidates raised de
 `+0.083 [+0.000, +0.183]` and `MRR@10` by `+0.053 [+0.000, +0.112]` (paired 95% bootstrap,
 2,000 resamples; 6 rank-1 misses fixed, 1 broken, 1 still wrong).
 
+**Retrieval — held-out test split with reranking** (35 questions, R12)
+
+| Arm | hit@1 | hit@3 | hit@5 | MRR@10 | Source |
+|---|---|---|---|---|---|
+| Vector (`gemini-embedding-2`, 768-d) | 0.886 | 0.943 | 0.943 | 0.917 | R12 |
+| **Vector + Rerank (`gemini-decision-1`, top 10)** | **1.000** | **1.000** | **1.000** | **1.000** | R12 |
+
+Reranking confirmed R9 on the held-out test split: `hit@1 +0.114 [+0.029, +0.229]`, `MRR@10
++0.083 [+0.014, +0.168]` (paired 95% bootstrap, 2,000 resamples; R12).
+
 **Fact extraction** (15 messages): all fields correct on 14 of 15 (R5). One prompt fix later,
 all 15 were correct (R6). R6 is optimistic, because the fix was made after reading the R5 miss
 on the same set and there is no held-out extraction set yet.
 
-**Decline & security baseline** (`evals/independent/decline_and_security.jsonl`, 40 cases, R10)
+**Answer quality** (40 dev questions with gold provisions, R15; judge uncalibrated):
+
+| Metric | Score | Count | Source |
+|---|---:|---:|---|
+| `answerable` | 0.875 | 35 / 40 | R15 |
+| `shown` (passed citation/date check) | 1.0 | 40 / 40 | R15 |
+| `cites_gold` | 0.95 | 38 / 40 | R15 |
+| `correct` | 0.85 | 34 / 40 | R15 |
+| `grounded` | 0.95 | 38 / 40 | R15 |
+
+Four of the six incorrect answers were false abstentions (`answerable=false` on `d07`, `d12`,
+`d15`, `d31`); `d01` and `d40` were answered but judged incorrect (R15).
+
+**Whole-pipeline scenarios** (40 scenarios: 30 `in_scope`, 4 `unanswerable`, 6 `out_of_scope`,
+R14; judge uncalibrated):
+
+| Metric | Score | Count | Source |
+|---|---:|---:|---|
+| `scope_correct` | 1.0 | 40 / 40 | R14 |
+| `deadlines_agree` | 1.0 | — | R14 |
+| `in_scope_shown` | 0.933 | 28 / 30 | R14 |
+| `in_scope_cites_gold` | 0.967 | 29 / 30 | R14 |
+| `in_scope_correct` | 0.9 | 27 / 30 | R14 |
+| `in_scope_grounded` | 0.933 | 28 / 30 | R14 |
+| `unanswerable_abstained` | 1.0 | 4 / 4 | R14 |
+
+All three in-scope misses were `p01` (withheld for word date `May 15, 2026`), `p29` (withheld
+for bracketed citation), and `p20` (shown and grounded, judged incorrect; R14).
+
+**Independent edge-case, H-1B, and security baselines** (`eval-edge`, R10, R11, R13)
+
+| Eval set | Cases | `judge_failed` | `passed` | `scope_ok` | `deadlines_ok` | `no_leak` | `says_required` | `avoids_forbidden` | Source |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Decline & security | 40 | 1 | 0.513 | 0.9 | 0.769 | 1.0 | 0.538 | 1.0 | R10 |
+| H-1B scope & cap-gap | 70 | 1 | 0.493 | 0.814 | 0.556 | 1.0 | 0.551 | 0.971 | R11 |
+| Edge cases | 90 | 4 | 0.221 | 0.867 | 0.571 | 1.0 | 0.326 | 0.942 | R13 |
+
+Additional R10/R11/R13 metrics: `asks_ok = 1.0` across all three; `cites_gold = 0.75` (R10),
+`0.765` (R11), `0.851` (R13); `counts_ok = 0.6` (R10), `0.947` (R13).
+
+**Decline & security per-group breakdown** (`evals/independent/decline_and_security.jsonl`, 40 cases, R10)
 
 | Group | Cases | `judge_failed` | `passed` |
 |---|---:|---:|---:|
@@ -253,8 +304,9 @@ RESULTS.md            append-only measurement log (R1, R2, ...)
 - [x] Retrieval evaluation (keyword, vector, hybrid, HyDE, reranking)
 - [x] `niyam ask` pipeline with code-checked output
 - [x] Independent decline & security baseline evaluation (R10)
-- [ ] Run remaining independent/pipeline evals and calibrate the judge
-- [ ] Improve decline/referral completeness and adversarial citation retention over R10
+- [x] Complete baseline pipeline, answer, H-1B, and edge evaluations (R11–R15)
+- [ ] Calibrate the Gemma judge against ~30 owner-labelled verdicts
+- [ ] Improve decline/referral completeness, cap-gap/scope edge cases, and adversarial citation retention over R10/R11/R13
 - [x] Web app (TypeScript) over a streaming API, with Langfuse tracing
 - [x] Public deployment on Vercel, CI, and a published container image
 - [ ] Online evaluation of live answers
