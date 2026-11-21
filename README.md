@@ -17,11 +17,25 @@ code checks the model's output before anyone sees it.
 **Live demo:** https://niyam-flame.vercel.app (free-tier models; "Watch a recorded answer"
 works even when the daily quota is used up).
 
-**Status:** v1 complete. The web app, `niyam ask` CLI, streaming API + user feedback endpoint,
-Langfuse tracing, **Layer 1** live self-correction (`pipeline.py`), **Layer 2** closed-loop
-auto-learning (`online-eval --learn` + `data/learned_corrections.json`, D77), offline CI eval gate
-(`niyam eval-gate`, D75), and live Vercel/GHCR deployment are operational with frozen baseline
-evaluations (`R4`–`R16`). Full-benchmark accuracy iterations remain scoped to v2.
+**Status:** v1 complete (plus **D78** in-page follow-ups). The web app supports ephemeral
+back-to-back follow-up questions (up to 6 turns in React memory, cleared on reload or exit),
+alongside the `niyam ask` CLI, streaming API + user feedback endpoint, Langfuse tracing, **Layer 1**
+live self-correction (`pipeline.py`), **Layer 2** closed-loop auto-learning (`online-eval --learn` +
+`data/learned_corrections.json`, D77), offline CI eval gate (`niyam eval-gate`, D75), and live
+Vercel/GHCR deployment. Baselines `R5`–`R15` are frozen; accuracy work on the independent edge
+sets and owner review of the builder-written sets/R16 audit are open v2 work.
+
+### At a glance (measured v1 baselines)
+
+| What was measured | Headline numbers | Source | Status / caveat |
+|---|---|---|---|
+| Retrieval (`vector+rerank`, 35 held-out test Qs) | `1.000` hit@1, `1.000` MRR@10 (`+0.114` vs vector) | R12 | Frozen v1 baseline (builder-written Qs) |
+| Whole-pipeline (`30 in_scope`, `4 unanswerable`, `6 oos`) | `1.0` `scope_correct` & `deadlines_agree`, `0.9` `in_scope_correct`, `0.933` `in_scope_grounded` | R14 | Judge uncalibrated (`R16` κ `0.583` on `correct`) |
+| Answer quality given gold (`40 dev Qs`) | `1.0` `shown`, `0.85` `correct`, `0.95` `grounded` | R15 | `4/6` misses caused by missing `context` on `d07/d12/d15/d31` (R16) |
+| Independent decline & security (`40` cases) | `1.0` `no_leak` & `asks_ok`, `1.0` `avoids_forbidden`, `0.513` strict `passed` | R10 | `says_required = 0.538`; open v2 work |
+| Independent H-1B & cap-gap (`70` cases) | `1.0` `no_leak` & `asks_ok`, `0.971` `avoids_forbidden`, `0.493` strict `passed` | R11 | `says_required = 0.551`; open v2 work |
+| Independent edge cases (`90` cases) | `1.0` `no_leak` & `asks_ok`, `0.942` `avoids_forbidden`, `0.221` strict `passed` | R13 | `says_required = 0.326`; open v2 work |
+| Provisional judge & gold-set audit (`30` verdicts, `150` items) | `0.667` multi-dim judge agreement; `127/150` clean (`4` high missing `context`) | R16 | Automated Gemini subagent audit; pending owner spot-check |
 
 ---
 
@@ -54,9 +68,11 @@ The output always has the same shape:
 
 ```
   Student's message (untrusted)
+  (+ up to 6 prior turns & prior_facts from browser RAM on follow-ups, D78)
         |
         v
-  [1] Extract facts (gemini-3.5-flash-lite) -> StudentFacts, question, out-of-scope topics
+  [1] Extract facts (gemini-3.5-flash-lite) -> updated StudentFacts, standalone question,
+                                               out-of-scope topics (for new message only)
         |
         v
   [2] Rules engine (pure Python)  -> findings: deadlines, day counts, obligations
@@ -76,6 +92,10 @@ The output always has the same shape:
         v
   Findings, assumptions, "not covered" and disclaimer, rendered by code
 ```
+
+Follow-up turns use **stateless client-carried context** and **query contextualization** at step
+`[1]` only (`extract()`), so steps `[2]`–`[5]` remain stateless, independently computed, and
+protected by the same citation and date checks on every turn (D78).
 
 ### Rules engine
 
@@ -253,8 +273,11 @@ D76, D77):
     and user feedback contradicting the regulation.
   - **Gate B:** micro-replays the failed question with the lesson (~15 s) and requires both
     `check_explanation()` and Gemma grounding to pass.
-  - **Gate C:** runs `niyam eval-gate` and `pytest` before auto-committing
-    `data/learned_corrections.json` to `main` (triggering Vercel redeploy).
+  - **Gate C:** runs `niyam eval-gate` and `pytest` before committing **only**
+    `data/learned_corrections.json` to `main` (triggering Vercel redeploy). The scheduled job never
+    modifies source code, rules-engine arithmetic, or system prompts; entries are capped at 1-sentence
+    reminders with indexed `8 CFR 214.2(f)` citations and zero ISO dates, and live answers still pass
+    the deterministic `check_explanation()` gate at runtime.
 
 ## Quick start
 
@@ -314,7 +337,7 @@ src/niyam/
 evals/                eval sets (JSONL)
 results/              raw output of every measurement and provisional R16 audits
 data/                 manifest, processed corpus, and verified learned corrections (D77)
-web/                  Vite + React + TypeScript site (D66, D76)
+web/                  Vite + React + TypeScript site (D66, D76, D78)
 DECISIONS.md          append-only design decision log (D1, D2, ...)
 RESULTS.md            append-only measurement log (R1, R2, ...)
 docs/results.md       code-generated evaluation summary (verified in CI)
@@ -339,11 +362,16 @@ docs/results.md       code-generated evaluation summary (verified in CI)
   2026-10-08.
 - Some rules-engine conventions, such as when unemployment days start counting, may differ from
   SEVIS or USCIS practice in edge cases. They are always shown as assumptions.
-- One message, one answer. There is no conversation history.
+- Follow-up context (up to 6 prior turns and extracted facts) lives only in browser React state
+  for the active page and clears immediately on reload or navigation (D78); there are no user
+  accounts or server-side conversation history.
+- Independent `eval-edge` strict pass rates (`R10` `0.513`, `R11` `0.493`, `R13` `0.221`) show
+  `1.0` safety (`no_leak`, `asks_ok`) but low `says_required` completeness (`0.326`–`0.551`) and are
+  explicitly open v2 work.
 - The v1 eval baselines (`R5`–`R15`) are frozen; the builder-written sets await owner review
   (`10` messages also overlap between `extraction.jsonl` and `pipeline.jsonl`), and the `R16`
-  judge/gold audit is provisional (automated Gemini subagents, not human calibration) pending
-  owner spot-check.
+  judge/gold audit is provisional (automated Gemini subagents, κ `0.500`–`0.583`, not human
+  calibration) pending owner spot-check.
 - The offline CI gate checks deterministic invariants and recomputed baseline reports without
   calling live LLMs in CI.
 
@@ -358,6 +386,7 @@ docs/results.md       code-generated evaluation summary (verified in CI)
 - [x] Complete baseline pipeline, answer, H-1B, and edge evaluations (R11–R15)
 - [x] Provisional judge and gold-set audit (R16), plus code-generated `docs/results.md`
 - [x] Web app (TypeScript) over a streaming API, with Langfuse tracing and thumbs feedback
+- [x] Ephemeral in-page follow-up questions with 6-turn rolling context (D78)
 - [x] Public deployment on Vercel, CI, and a published container image
 - [x] Online evaluation & failure-harvesting dataset flywheel (`niyam online-eval`)
 - [x] Offline CI regression gate (`niyam eval-gate` & `eval-report --check`)
@@ -365,10 +394,9 @@ docs/results.md       code-generated evaluation summary (verified in CI)
 ### Next (v2)
 
 - [ ] Owner spot-check of `R16` audit and human calibration of the judge
-- [ ] Fix `d07`/`d12`/`d15`/`d31` gold `context`, include headings in `format_provisions()`, and
-      fix `_stem_filing_window` clamping in `opt.py`
-- [ ] Improve decline/referral completeness, cap-gap/scope edge cases, and messy-input extraction
-      over `R10`/`R11`/`R13`, plus add a held-out extraction/pipeline v2 split
+- [ ] Fix `d07`/`d12`/`d15`/`d31` gold `context` and fix `_stem_filing_window` clamping in `opt.py`
+- [ ] Improve decline/referral completeness (`says_required`), cap-gap/scope edge cases, and
+      messy-input extraction over `R10`/`R11`/`R13`, plus add a held-out extraction/pipeline v2 split
 
 ## License
 
