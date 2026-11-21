@@ -1,0 +1,54 @@
+[
+  {
+    "id": "lc-stem-10day-reporting",
+    "keywords": [
+      "interrupted",
+      "interruption",
+      "loss of employment",
+      "10 days",
+      "report",
+      "dso"
+    ],
+    "required_citations": [
+      "8 CFR 214.2(f)(12)(i)",
+      "8 CFR 214.2(f)(12)(ii)(A)"
+    ],
+    "guidance": "Distinguish general OPT employment-interruption reporting under 8 CFR 214.2(f)(12)(i) from the 10-day reporting requirement in 8 CFR 214.2(f)(12)(ii)(A), which applies specifically to students on an approved 24-month STEM OPT extension.",
+    "source_trace_id": null
+  },
+  {
+    "id": "lc-cap-gap-vs-h1b-scope",
+    "keywords": [
+      "h-1b",
+      "h1b",
+      "cap-gap",
+      "cap gap",
+      "lottery",
+      "specialty occupation",
+      "april 1"
+    ],
+    "required_citations": [
+      "8 CFR 214.2(f)(5)(vii)(A)",
+      "8 CFR 214.2(f)(5)(vii)(C)"
+    ],
+    "guidance": "Under 8 CFR 214.2(f)(5)(vii)(A) and (C), cap-gap extends F-1 status and OPT only for a timely filed cap-subject H-1B petition requesting change of status to October 1 (extending up to April 1 of the fiscal year while maintaining F-1 status); decline H-1B lottery, cap-exemption, and 8 CFR 214.2(h) petition rules and refer the student to their DSO or an immigration attorney.",
+    "source_trace_id": null
+  },
+  {
+    "id": "lc-out-of-scope-dso-referral",
+    "keywords": [
+      "green card",
+      "perm",
+      "tax",
+      "taxes",
+      "consular",
+      "visa stamp",
+      "j-1",
+      "m-1",
+      "h-1b"
+    ],
+    "required_citations": [],
+    "guidance": "Whenever declining any out-of-scope topic outside 8 CFR 214.2(f), explicitly state that it is outside 8 CFR 214.2(f) and refer the student to their DSO (designated school official) or a qualified immigration attorney.",
+    "source_trace_id": null
+  }
+]

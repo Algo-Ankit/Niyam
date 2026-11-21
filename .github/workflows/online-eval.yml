@@ -1,9 +1,9 @@
-# Asynchronous online evaluation & failure harvesting from Langfuse Cloud traces (D76).
+# Asynchronous online evaluation & closed-loop failure learning from Langfuse traces (D76, D77).
 name: Online Eval
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
       hours:
@@ -16,14 +16,19 @@ on:
         required: false
         default: "10"
         type: string
+      learn:
+        description: "Synthesize, micro-verify, and commit new learned corrections"
+        required: false
+        default: true
+        type: boolean
       dry_run:
-        description: "Evaluate without writing scores or dataset items back to Langfuse"
+        description: "Evaluate without writing scores, dataset items, or commits"
         required: false
         default: false
         type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   online-eval:
@@ -84,6 +89,10 @@ jobs:
         run: |
           hours="${{ inputs.hours || '24' }}"
           max_judge="${{ inputs.max_judge || '10' }}"
+          learn_flag="--learn --max-learn 3"
+          if [ "${{ inputs.learn }}" = "false" ]; then
+            learn_flag=""
+          fi
           dry_flag=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             dry_flag="--dry-run"
@@ -92,11 +101,27 @@ jobs:
             --hours "$hours" \
             --max-judge "$max_judge" \
             --out online-failures.jsonl \
+            $learn_flag \
             $dry_flag
           if [ -s online-failures.jsonl ]; then
             echo "has_failures=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_failures=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.secrets.outputs.ready == 'true' && inputs.dry_run != true
+        name: Verify and commit learned corrections (Gate C)
+        run: |
+          if ! git diff --quiet data/learned_corrections.json; then
+            .tools/bootstrap/bin/uv run --frozen niyam eval-gate
+            .tools/bootstrap/bin/uv run --frozen pytest -q
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/learned_corrections.json
+            git commit -m "online-eval: learn verified regulation guidance from live traces"
+            git push origin HEAD:main
+          else
+            echo "No new learned corrections to commit."
           fi
 
       - if: always() && steps.run.outputs.has_failures == 'true'

@@ -22,8 +22,8 @@ FROM python:3.12-slim
 RUN useradd --create-home --uid 10001 niyam
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
-# The corpus snapshot date for GET /api/health (D66); the corpus itself lives in Postgres.
-COPY data/manifest.json ./data/manifest.json
+# The corpus snapshot date for GET /api/health (D66) and verified learned rules (D77).
+COPY data/manifest.json data/learned_corrections.json ./data/
 RUN mkdir /app/.state && chown niyam /app/.state
 # FORWARDED_ALLOW_IPS: uvicorn trusts X-Forwarded-For only from these peers and takes the
 # right-most untrusted address, so a client cannot spoof its IP past the host's proxy (D64, D68).

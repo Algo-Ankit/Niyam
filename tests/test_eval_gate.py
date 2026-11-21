@@ -18,6 +18,10 @@ def _copy_repo_inputs(tmp_path: Path) -> None:
         _ROOT / "data/processed/8-cfr-214.2-f.json",
         tmp_path / "data/processed/8-cfr-214.2-f.json",
     )
+    shutil.copy2(
+        _ROOT / "data/learned_corrections.json",
+        tmp_path / "data/learned_corrections.json",
+    )
 
 
 def test_eval_gate_passes_on_committed_baselines() -> None:

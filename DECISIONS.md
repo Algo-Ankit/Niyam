@@ -715,3 +715,31 @@ live traffic to auto-mutate legal prompts or rules unsupervised. *Tradeoff:* req
 Actions secrets (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `GEMINI_API_KEY`) to enable the
 scheduled workflow (skipped cleanly on schedule when absent) and adds structured answer fields to
 Langfuse within the 50k units/month Hobby limit.
+
+**D77. Add Layer 1 live self-correction and Layer 2 verified closed-loop auto-learning.**
+Owner-approved on 2026-11-21.
+1. **Layer 1 (live in-request self-correction in `src/niyam/assistant/pipeline.py`):**
+   - `format_provisions()` now includes each provision's heading trail so child paragraphs keep
+     their parent regulatory scope.
+   - `repair_explanation()` runs deterministically before `check_explanation()` to strip stray
+     square brackets from `citations` and normalize full written dates (`May 15, 2026`, `15 May
+     2026`) to ISO `YYYY-MM-DD` **only when** that date is already in the rules engine's or
+     student's known dates (while keeping `check_explanation()` itself strict).
+   - Inside the existing `verify` span, if `check_explanation()` still rejects a draft and less
+     than `RETRY_BUDGET_SECONDS` (25 s) have elapsed, `explain()` is retried once with the exact
+     rejection reason (`IMPORTANT CORRECTION: ...`).
+2. **Layer 2 (closed-loop auto-learning in `data/learned_corrections.json` & `online.py`):**
+   - `pipeline.py` matches up to 3 relevant lessons from `data/learned_corrections.json`, pins
+     their `required_citations` into retrieval via `_with_cited()`, and injects their 1-sentence
+     `guidance` into `explain()`.
+   - `niyam online-eval --learn` (scheduled every 6 hours in `.github/workflows/online-eval.yml`)
+     drafts candidate lessons from failed/flagged Langfuse traces through **3 fast gates** instead
+     of 20-hour offline evals: **Gate A** rejects transient errors, troll/contradictory feedback,
+     unindexed citations, and hardcoded ISO dates; **Gate B** replays the failed question with
+     the new lesson through `explain()` + `check_explanation()` + Gemma grounding; **Gate C**
+     runs `niyam eval-gate` + `pytest -q` in CI before committing updates to `main` (redeploying
+     to Vercel automatically).
+*Why:* resolves live formatting/citation slips (`p01`, `p29`) and scope/omission gaps (`p25`)
+continuously without unsafe prompt self-modification or multi-hour eval reruns. *Tradeoff:* one
+extra `explain()` call on live verify failures under 25 s and automated bot commits to
+`data/learned_corrections.json` on `main` when all three gates pass.

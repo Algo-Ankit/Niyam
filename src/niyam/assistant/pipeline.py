@@ -11,10 +11,11 @@ those; (5) code rejects any citation or date the model invented.
 import json
 import re
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date
+from pathlib import Path
 from typing import Literal, get_args
 
 import psycopg
@@ -66,6 +67,8 @@ Stage = Literal["extract", "rules", "retrieve", "rerank", "explain", "verify"]
 STAGES: tuple[Stage, ...] = get_args(Stage)
 StageCallback = Callable[[Stage, int], None]  # (stage, elapsed milliseconds)
 RETRIEVAL_K = 5
+LEARNED_CORRECTIONS_PATH = Path("data/learned_corrections.json")
+RETRY_BUDGET_SECONDS = 25.0
 _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _DAY = r"(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?"
 _MONTH_CAP = (
@@ -87,19 +90,37 @@ _FULL_MONTH_DATE = re.compile(
     r"\b(January|February|March|April|May|June|July|August|September|October|November|December)"
     r" (\d{1,2}), (\d{4})\b"
 )
+_WRITTEN_MONTH_DAY_YEAR = re.compile(
+    rf"\b({_MONTH_ANY}) (0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?,?\s+(\d{{4}})\b"
+)
+_WRITTEN_DAY_MONTH_YEAR = re.compile(
+    rf"\b(0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)? ({_MONTH_CAP}),?\s+(\d{{4}})\b"
+)
 _MONTHS: dict[str, int] = {
     "january": 1,
+    "jan": 1,
     "february": 2,
+    "feb": 2,
     "march": 3,
+    "mar": 3,
     "april": 4,
+    "apr": 4,
     "may": 5,
     "june": 6,
+    "jun": 6,
     "july": 7,
+    "jul": 7,
     "august": 8,
+    "aug": 8,
     "september": 9,
+    "sep": 9,
+    "sept": 9,
     "october": 10,
+    "oct": 10,
     "november": 11,
+    "nov": 11,
     "december": 12,
+    "dec": 12,
 }
 
 
@@ -121,6 +142,65 @@ class Explanation(BaseModel):
     answerable: bool = Field(description="False if the provisions do not answer the question")
     explanation: str = Field(description="Plain-language answer, at most 150 words")
     citations: list[str] = Field(description="Citations of the provisions the answer relies on")
+
+
+@dataclass(frozen=True)
+class LearnedCorrection:
+    """Verified guidance harvested from failures or audits, pinned by keyword match (D77)."""
+
+    id: str
+    keywords: tuple[str, ...]
+    required_citations: tuple[str, ...]
+    guidance: str
+    source_trace_id: str | None = None
+
+
+def load_learned_corrections(
+    path: Path = LEARNED_CORRECTIONS_PATH,
+) -> tuple[LearnedCorrection, ...]:
+    """Load learned corrections from `path`, returning `()` if absent or unreadable."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ()
+    if not isinstance(raw, list):
+        return ()
+    items: list[LearnedCorrection] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        cid = str(row.get("id", "")).strip()
+        guidance = str(row.get("guidance", "")).strip()
+        keywords = tuple(str(k).strip().lower() for k in row.get("keywords", ()) if str(k).strip())
+        citations = tuple(
+            str(c).strip() for c in row.get("required_citations", ()) if str(c).strip()
+        )
+        source_trace = row.get("source_trace_id")
+        if cid and guidance and keywords:
+            items.append(
+                LearnedCorrection(
+                    id=cid,
+                    keywords=keywords,
+                    required_citations=citations,
+                    guidance=guidance,
+                    source_trace_id=str(source_trace) if source_trace else None,
+                )
+            )
+    return tuple(items)
+
+
+def match_learned_corrections(
+    question: str, corrections: Sequence[LearnedCorrection], limit: int = 3
+) -> tuple[LearnedCorrection, ...]:
+    """Return up to `limit` corrections matching `question`, ordered by keyword hits."""
+    lowered = question.lower()
+    scored: list[tuple[int, int, LearnedCorrection]] = []
+    for index, correction in enumerate(corrections):
+        hits = sum(1 for kw in correction.keywords if kw in lowered)
+        if hits > 0:
+            scored.append((hits, -index, correction))
+    scored.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+    return tuple(entry[2] for entry in scored[:limit])
 
 
 @dataclass(frozen=True)
@@ -171,12 +251,16 @@ def answer(
 
 
 def _answer(message: str, as_of: date, services: Services, stage: "_StageTimer") -> Reply:
+    started = time.perf_counter()
     generator, level = services.generator, services.thinking_level
     with stage("extract"):
         extraction = extract(message, as_of, generator, level)
     stage.trace.question(extraction.question, as_of)
     if extraction.kind != "question" and not states_facts(extraction.facts):
         return fixed_reply(extraction, extraction.kind)
+    matched = match_learned_corrections(extraction.question, load_learned_corrections())
+    extra_citations = [c for item in matched for c in item.required_citations]
+    guidance = tuple(item.guidance for item in matched)
     with stage("rules"):
         assessment = assess(extraction.facts, as_of)
     with stage("retrieve"):
@@ -185,13 +269,58 @@ def _answer(message: str, as_of: date, services: Services, stage: "_StageTimer")
         )
     with stage("rerank"):
         top, rerank_error = top_provisions(services.decider, extraction.question, candidates)
-        provisions = _with_cited(services.conn, top, assessment)
+        provisions = _with_cited(services.conn, top, assessment, extra_citations)
     with stage("explain"):
-        explanation = explain(extraction.question, assessment, provisions, generator, level)
+        explanation = explain(
+            extraction.question, assessment, provisions, generator, level, guidance=guidance
+        )
     with stage("verify"):
         given = fact_dates(extraction.facts) | {as_of.isoformat()}
-        reason = check_explanation(explanation, assessment, provisions, given)
+        explanation, reason = _verify_or_self_correct(
+            explanation,
+            question=extraction.question,
+            assessment=assessment,
+            provisions=provisions,
+            given=given,
+            services=services,
+            guidance=guidance,
+            started=started,
+        )
     return Reply(extraction, assessment, provisions, explanation, reason, rerank_error)
+
+
+def _verify_or_self_correct(  # noqa: PLR0913  # encapsulates Layer 1 repair + 1-shot retry
+    explanation: Explanation,
+    *,
+    question: str,
+    assessment: Assessment,
+    provisions: tuple[Hit, ...],
+    given: frozenset[str],
+    services: Services,
+    guidance: tuple[str, ...],
+    started: float,
+) -> tuple[Explanation, str | None]:
+    repaired = repair_explanation(explanation, assessment, provisions, given)
+    reason = check_explanation(repaired, assessment, provisions, given)
+    if reason is not None and (time.perf_counter() - started) < RETRY_BUDGET_SECONDS:
+        try:
+            retried = explain(
+                question,
+                assessment,
+                provisions,
+                services.generator,
+                services.thinking_level,
+                guidance=guidance,
+                rejection_reason=reason,
+            )
+        except ModelError:
+            return repaired, reason
+        retried_repaired = repair_explanation(retried, assessment, provisions, given)
+        retried_reason = check_explanation(retried_repaired, assessment, provisions, given)
+        if retried_reason is None:
+            return retried_repaired, None
+        return retried_repaired, retried_reason
+    return repaired, reason
 
 
 class _StageTimer:
@@ -236,16 +365,60 @@ def top_provisions(
     return ordered[:RETRIEVAL_K], None
 
 
-def explain(
+def explain(  # noqa: PLR0913  # optional learned guidance and retry rejection reason
     question: str,
     assessment: Assessment,
     provisions: tuple[Hit, ...],
     generator: GenerativeModel,
     thinking_level: ThinkingLevel | None,
+    *,
+    guidance: Sequence[str] = (),
+    rejection_reason: str | None = None,
 ) -> Explanation:
-    """The generator's answer, using only `provisions` and the computed findings."""
-    prompt = _explanation_prompt(question, assessment, provisions)
+    """The generator's answer, using only `provisions`, computed findings, and optional guidance."""
+    prompt = _explanation_prompt(question, assessment, provisions, guidance, rejection_reason)
     return _generate(generator, prompt, Explanation, thinking_level)
+
+
+def repair_explanation(
+    explanation: Explanation,
+    assessment: Assessment,
+    provisions: tuple[Hit, ...],
+    given_dates: frozenset[str] = frozenset(),
+) -> Explanation:
+    """Deterministically normalize bracketed citations and already-known written dates (D77)."""
+    cleaned_citations = list(
+        dict.fromkeys(c.strip().strip("[]").strip() for c in explanation.citations if c.strip())
+    )
+    provision_words, _ = _provision_dates(provisions)
+    known = _known_dates(assessment, given_dates)
+
+    def _replace_mdy(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        if raw.lower() in provision_words:
+            return raw
+        return _iso_if_known(match.group(1), match.group(2), match.group(3), known) or raw
+
+    def _replace_dmy(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        if raw.lower() in provision_words:
+            return raw
+        return _iso_if_known(match.group(2), match.group(1), match.group(3), known) or raw
+
+    text = _WRITTEN_MONTH_DAY_YEAR.sub(_replace_mdy, explanation.explanation)
+    text = _WRITTEN_DAY_MONTH_YEAR.sub(_replace_dmy, text)
+    return explanation.model_copy(update={"citations": cleaned_citations, "explanation": text})
+
+
+def _iso_if_known(month_s: str, day_s: str, year_s: str, known: set[str]) -> str | None:
+    month = _MONTHS.get(month_s.rstrip(".").lower())
+    if month is None:
+        return None
+    try:
+        iso = date(int(year_s), month, int(day_s)).isoformat()
+    except ValueError:
+        return None
+    return iso if iso in known else None
 
 
 def fact_dates(facts: StudentFacts) -> frozenset[str]:
@@ -303,11 +476,7 @@ def check_explanation(
     if invented:
         return f"cited provisions it was not given: {invented}"
     provision_words, provision_isos = _provision_dates(provisions)
-    known_dates = {
-        d.isoformat() for f in assessment.findings for d in (f.opens, f.closes) if d is not None
-    }
-    known_dates |= set(_ISO_DATE.findall(" ".join(f.summary for f in assessment.findings)))
-    known_dates |= given_dates | provision_isos
+    known_dates = _known_dates(assessment, given_dates) | provision_isos
     bad_words = [
         d for d in _WORD_DATE.findall(explanation.explanation) if d.lower() not in provision_words
     ]
@@ -317,6 +486,14 @@ def check_explanation(
     if unknown:
         return f"stated dates the rules engine did not compute: {unknown}"
     return None
+
+
+def _known_dates(assessment: Assessment, given_dates: frozenset[str]) -> set[str]:
+    known = {
+        d.isoformat() for f in assessment.findings for d in (f.opens, f.closes) if d is not None
+    }
+    known |= set(_ISO_DATE.findall(" ".join(f.summary for f in assessment.findings)))
+    return known | set(given_dates)
 
 
 def _provision_dates(provisions: tuple[Hit, ...]) -> tuple[set[str], set[str]]:
@@ -335,10 +512,13 @@ def _provision_dates(provisions: tuple[Hit, ...]) -> tuple[set[str], set[str]]:
 
 
 def _with_cited(
-    conn: psycopg.Connection, hits: list[Hit], assessment: Assessment
+    conn: psycopg.Connection,
+    hits: list[Hit],
+    assessment: Assessment,
+    extra_citations: Sequence[str] = (),
 ) -> tuple[Hit, ...]:
-    """The findings' paragraphs that retrieval missed, then the retrieved `hits`."""
-    cited = [f.citation for f in assessment.findings]
+    """The findings' and learned-correction paragraphs missed by retrieval, then `hits`."""
+    cited = [f.citation for f in assessment.findings] + list(extra_citations)
     seen = {h.citation for h in hits}
     extra = by_citation(conn, [c for c in dict.fromkeys(cited) if c not in seen])
     return (*extra, *hits)
@@ -362,25 +542,47 @@ def _extraction_prompt(message: str, as_of: date) -> str:
     )
 
 
-def _explanation_prompt(question: str, assessment: Assessment, provisions: tuple[Hit, ...]) -> str:
+def _explanation_prompt(
+    question: str,
+    assessment: Assessment,
+    provisions: tuple[Hit, ...],
+    guidance: Sequence[str] = (),
+    rejection_reason: str | None = None,
+) -> str:
     findings = [
         {"rule": f.rule, "citation": f.citation, "summary": f.summary, "status": f.status}
         for f in assessment.findings
     ]
-    return (
+    blocks = [
         "You explain US F-1 student rules. Answer the question using ONLY the provisions below "
         "and the computed findings. Rules: cite provisions by their exact bracketed citation; "
         "never compute or state a date that is not in the findings (copy dates exactly, in "
         "YYYY-MM-DD form); if the provisions do not answer the question, set answerable to "
-        "false and say what is missing; do not give legal advice.\n\n"
-        f"Question: {question}\n\nComputed findings (authoritative):\n"
-        f"{json.dumps(findings, indent=1)}\n\nProvisions:\n{format_provisions(provisions)}"
-    )
+        "false and say what is missing; do not give legal advice.",
+        f"Question: {question}",
+        f"Computed findings (authoritative):\n{json.dumps(findings, indent=1)}",
+    ]
+    if guidance:
+        lessons = "\n".join(f"- {item}" for item in guidance)
+        blocks.append(f"Verified regulatory reminders:\n{lessons}")
+    if rejection_reason:
+        blocks.append(
+            f"IMPORTANT CORRECTION: Your previous draft was rejected because it "
+            f"{rejection_reason}. Rewrite using ONLY exact citations listed below and ONLY "
+            "ISO YYYY-MM-DD dates from the computed findings."
+        )
+    blocks.append(f"Provisions:\n{format_provisions(provisions)}")
+    return "\n\n".join(blocks)
 
 
 def format_provisions(provisions: tuple[Hit, ...]) -> str:
-    """Provisions as the generator and judge see them: bracketed citation, then the text."""
-    return "\n\n".join(f"[{p.citation}]\n{p.body}" for p in provisions)
+    """Provisions as the generator and judge see them: bracketed citation, headings, and text."""
+    blocks = []
+    for p in provisions:
+        trail = " > ".join(h for h in p.headings if h)
+        head = f"Headings: {trail}\n" if trail else ""
+        blocks.append(f"[{p.citation}]\n{head}{p.body}")
+    return "\n\n".join(blocks)
 
 
 def _generate[T: BaseModel](

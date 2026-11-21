@@ -385,6 +385,7 @@ def _online_eval(config: online_eval.OnlineEvalConfig) -> int:
                 models.judge,
                 corpus_map,
                 config=config,
+                generator=models.generator,
             )
     finally:
         client.shutdown()
@@ -392,7 +393,7 @@ def _online_eval(config: online_eval.OnlineEvalConfig) -> int:
     print(
         f"online-eval{mode}: fetched={summary.traces_fetched} "
         f"judged={summary.newly_judged} judge_failed={summary.judge_failed} "
-        f"failures={summary.failures_harvested}"
+        f"failures={summary.failures_harvested} learned={summary.lessons_learned}"
     )
     if summary.counts_by_type:
         print(f"  counts={summary.counts_by_type}")
@@ -461,6 +462,16 @@ def _add_eval_parsers(commands: argparse._SubParsersAction[argparse.ArgumentPars
     online.add_argument(
         "--dry-run", action="store_true", help="evaluate without writing scores or dataset items"
     )
+    online.add_argument(
+        "--learn", action="store_true", help="synthesize and micro-verify lessons from failures"
+    )
+    online.add_argument("--max-learn", type=int, default=3, help="maximum lessons to learn per run")
+    online.add_argument(
+        "--learned-file",
+        type=Path,
+        default=pipeline.LEARNED_CORRECTIONS_PATH,
+        help="path to learned_corrections.json",
+    )
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -487,6 +498,9 @@ def _dispatch(args: argparse.Namespace) -> int:
                 dataset_name=args.dataset,
                 dry_run=args.dry_run,
                 out_path=args.out,
+                learn=args.learn,
+                max_learn=args.max_learn,
+                learned_path=args.learned_file,
             )
         ),
         "ask": lambda: _ask(args.message, args.as_of),

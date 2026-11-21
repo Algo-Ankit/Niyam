@@ -1,6 +1,26 @@
 from datetime import date
+from pathlib import Path
+from typing import Any, cast
 
-from niyam.assistant.pipeline import Explanation, check_explanation, fact_dates
+import psycopg
+import pytest
+from pydantic import BaseModel
+
+from fakes import FakeDecisionModel, FakeEmbedder
+from niyam.assistant import pipeline
+from niyam.assistant.pipeline import (
+    Explanation,
+    Extraction,
+    Services,
+    answer,
+    check_explanation,
+    fact_dates,
+    format_provisions,
+    load_learned_corrections,
+    match_learned_corrections,
+    repair_explanation,
+)
+from niyam.models.types import GenerationRequest, GenerationResult, Usage
 from niyam.retrieval.store import Hit
 from niyam.rules.opt import StudentFacts, assess
 
@@ -74,3 +94,80 @@ def test_literal_dates_from_retrieved_provisions_are_allowed_but_altered_years_r
         "This applies starting 2027-09-15.",
     ):
         assert check_explanation(_explanation(bad_text, cite), _ASSESSMENT, provisions) is not None
+
+
+def test_repair_explanation_strips_citation_brackets_and_normalizes_known_word_dates() -> None:
+    draft = _explanation(
+        "Your program ended May 15, 2026. File from Feb 14, 2026 to 14 June 2026.",
+        ["[8 CFR 214.2(f)(11)(i)(B)(2)]", " 8 CFR 214.2(f)(11)(i)(B)(2) "],
+    )
+    given = fact_dates(StudentFacts(program_end_date=date(2026, 5, 15)))
+    repaired = repair_explanation(draft, _ASSESSMENT, _PROVISIONS, given)
+    assert repaired.citations == ["8 CFR 214.2(f)(11)(i)(B)(2)"]
+    assert (
+        repaired.explanation == "Your program ended 2026-05-15. File from 2026-02-14 to 2026-06-14."
+    )
+    assert check_explanation(repaired, _ASSESSMENT, _PROVISIONS, given) is None
+
+    unknown_date = _explanation("File by June 14, 2029.", ["[8 CFR 214.2(f)(11)(i)(B)(2)]"])
+    repaired_bad = repair_explanation(unknown_date, _ASSESSMENT, _PROVISIONS, given)
+    assert "2029-06-14" not in repaired_bad.explanation
+    assert check_explanation(repaired_bad, _ASSESSMENT, _PROVISIONS, given) is not None
+
+
+class _SelfCorrectingGenerator:
+    model_id = "self-correct"
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def generate[T: BaseModel](self, request: GenerationRequest[T]) -> GenerationResult[T]:
+        self.prompts.append(request.prompt)
+        if request.schema is Extraction:
+            data: dict[str, Any] = {
+                "facts": {"program_end_date": "2026-05-15"},
+                "question": "When must I file for OPT?",
+            }
+        elif "IMPORTANT CORRECTION:" not in request.prompt:
+            data = {
+                "answerable": True,
+                "explanation": "File by 2026-06-14.",
+                "citations": ["8 CFR 214.2(f)(99)"],
+            }
+        else:
+            data = {
+                "answerable": True,
+                "explanation": "File by 2026-06-14.",
+                "citations": ["8 CFR 214.2(f)(11)(i)(B)(2)"],
+            }
+        return GenerationResult(request.schema.model_validate(data), Usage())
+
+
+def test_answer_self_corrects_on_verify_failure_with_one_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hit = Hit("8 CFR 214.2(f)(11)(i)(B)(2)", ("OPT",), "Filing window rule.", 0.9)
+    monkeypatch.setattr(pipeline, "search", lambda conn, embedder, query, k: [hit])
+    monkeypatch.setattr(pipeline, "by_citation", lambda conn, citations: [])
+    gen = _SelfCorrectingGenerator()
+    services = Services(
+        gen, FakeDecisionModel(), FakeEmbedder(), cast(psycopg.Connection, object()), None
+    )
+    reply = answer("My program ends 2026-05-15, when do I file?", date(2026, 5, 1), services)
+    assert reply.rejected_reason is None
+    assert reply.explanation.citations == ["8 CFR 214.2(f)(11)(i)(B)(2)"]
+    assert len(gen.prompts) == 3
+    assert "IMPORTANT CORRECTION:" in gen.prompts[2]
+
+
+def test_format_provisions_includes_headings_and_match_learned_corrections() -> None:
+    formatted = format_provisions(
+        (Hit("8 CFR 214.2(f)(12)(ii)(A)", ("OPT", "24-month STEM OPT"), "Report in 10 days.", 0.9),)
+    )
+    assert "Headings: OPT > 24-month STEM OPT" in formatted
+    corrections = load_learned_corrections(Path("data/learned_corrections.json"))
+    assert len(corrections) >= 3
+    stem_hits = match_learned_corrections("How do I report an interruption to my DSO?", corrections)
+    assert any(item.id == "lc-stem-10day-reporting" for item in stem_hits)
+    h1b_hits = match_learned_corrections("Am I eligible for H-1B cap-gap?", corrections)
+    assert any(item.id == "lc-cap-gap-vs-h1b-scope" for item in h1b_hits)

@@ -76,9 +76,11 @@ let clients spoof their IP. Alternatively set `CLIENT_IP_HEADER` to a header the
   - `web`: `npm ci`, `npm run typecheck`, `npm run build`.
   - `container`: builds the Docker image, checks `GET /api/health` and the non-root user, and on
     `main` publishes `ghcr.io/algo-ankit/niyam-api`.
-- **`.github/workflows/online-eval.yml`** runs daily at `03:00 UTC` (or manually via
-  `workflow_dispatch`) to execute `niyam online-eval` against Langfuse Cloud traces (D76) and
-  upload `online-failures.jsonl` as an artifact when any failures are harvested.
+- **`.github/workflows/online-eval.yml`** runs every 6 hours (`0 */6 * * *`) or manually via
+  `workflow_dispatch` to execute `niyam online-eval --learn --max-learn 3` against Langfuse Cloud
+  traces (D76, D77), uploads `online-failures.jsonl` as an artifact when failures are harvested,
+  and when `data/learned_corrections.json` changes, runs `niyam eval-gate` and `pytest` before
+  committing back to `main` (which triggers Vercel to redeploy).
   - Required GitHub Actions secrets (`Settings > Secrets and variables > Actions`):
     `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `GEMINI_API_KEY` (optional `LANGFUSE_HOST`,
     defaults to `https://cloud.langfuse.com`). If any secret is missing, scheduled runs skip

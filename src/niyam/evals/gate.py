@@ -6,13 +6,17 @@ frozen v1 regression floors, alongside deterministic checks on all eval sets and
 """
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from niyam.assistant.pipeline import load_learned_corrections
 from niyam.evals import answers, edge, end_to_end, extraction, retrieval
 from niyam.rules.opt import assess
+
+_ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,7 @@ def run_gate(root: Path = Path(".")) -> list[GateCheck]:
     )
     checks.extend(_check_eval_sets_and_rules(root))
     checks.extend(_check_audits(root))
+    checks.extend(_check_learned_corrections(root))
     return checks
 
 
@@ -350,5 +355,34 @@ def _check_audits(root: Path) -> list[GateCheck]:
             gold_total == 150 and gold_flagged == 23 and bool(gold_audit.get("provisional")),
             f"total={gold_total}, flagged={gold_flagged}",
             "total=150, flagged=23, provisional=true",
+        ),
+    ]
+
+
+def _check_learned_corrections(root: Path) -> list[GateCheck]:
+    corpus = json.loads((root / "data/processed/8-cfr-214.2-f.json").read_text(encoding="utf-8"))
+    indexed = {p["citation"] for p in corpus["provisions"] if p["text"]}
+    path = root / "data/learned_corrections.json"
+    corrections = load_learned_corrections(path)
+    bad_citations = sorted({c for item in corrections for c in item.required_citations} - indexed)
+    dated = [item.id for item in corrections if _ISO_DATE.search(item.guidance)]
+    return [
+        GateCheck(
+            "invariants.learned_corrections_loaded",
+            len(corrections) >= 3,
+            str(len(corrections)),
+            ">= 3 learned corrections",
+        ),
+        GateCheck(
+            "invariants.learned_corrections_citations",
+            not bad_citations,
+            f"bad={len(bad_citations)}",
+            "0 invalid CFR citations",
+        ),
+        GateCheck(
+            "invariants.learned_corrections_no_hardcoded_dates",
+            not dated,
+            f"dated={len(dated)}",
+            "0 hardcoded ISO dates in guidance",
         ),
     ]

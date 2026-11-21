@@ -7,9 +7,11 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel
 
+from niyam.assistant.pipeline import Explanation, load_learned_corrections
 from niyam.evals import online
 from niyam.evals.judge import JUDGE_ATTEMPTS
 from niyam.evals.online import (
+    CandidateLesson,
     EvaluatedTrace,
     LiveTrace,
     OnlineEvalConfig,
@@ -18,6 +20,7 @@ from niyam.evals.online import (
     format_cited_provisions,
     load_corpus_map,
     run_online_eval,
+    synthesize_lesson,
 )
 from niyam.models.errors import ProviderResponseError
 from niyam.models.types import GenerationRequest, GenerationResult, Usage
@@ -227,3 +230,121 @@ def test_observation_parser_handles_json_strings_and_score_v3_variants() -> None
     assert parsed.user_feedback is False and parsed.user_feedback_comment == "missing dates"
     assert parsed.online_grounded is True and parsed.online_grounded_reason == "supported"
     assert parsed.cited_provisions == ("8 CFR 214.2(f)(5)(vii)(A)",)
+
+
+class _ScriptedCandidateJudge:
+    model_id = "scripted-judge"
+
+    def __init__(self, candidate: CandidateLesson, *, grounded: bool = True) -> None:
+        self._candidate = candidate
+        self._grounded = grounded
+
+    def generate[T: BaseModel](self, request: GenerationRequest[T]) -> GenerationResult[T]:
+        if request.schema is CandidateLesson:
+            payload: dict[str, object] = self._candidate.model_dump()
+        else:
+            payload = OnlineVerdict(grounded=self._grounded, reason="checked").model_dump()
+        return GenerationResult(request.schema.model_validate(payload), Usage())
+
+
+class _ReplayGenerator:
+    model_id = "replay-gen"
+
+    def generate[T: BaseModel](self, request: GenerationRequest[T]) -> GenerationResult[T]:
+        data = Explanation(
+            answerable=True,
+            explanation="STEM OPT loss of employment must be reported within 10 days.",
+            citations=["[8 CFR 214.2(f)(12)(ii)(A)]"],
+        ).model_dump()
+        return GenerationResult(request.schema.model_validate(data), Usage())
+
+
+def test_synthesize_lesson_rejects_invalid_citations_hardcoded_dates_and_troll_feedback() -> None:
+    corpus = load_corpus_map(_ROOT / "data/processed/8-cfr-214.2-f.json")
+    item = EvaluatedTrace(
+        _trace(trace_id="bad_trace_001"), "negative_feedback", "user_reported", False
+    )
+
+    troll = CandidateLesson(
+        valid_lesson=False,
+        keywords=["opt"],
+        required_citations=["8 CFR 214.2(f)(12)(i)"],
+        guidance="Students do not actually get 500 unemployment days.",
+        reason="Contradicts regulation",
+    )
+    bad_cite = CandidateLesson(
+        valid_lesson=True,
+        keywords=["opt"],
+        required_citations=["8 CFR 214.2(f)(99)(z)"],
+        guidance="Always cite valid paragraphs when explaining OPT rules.",
+        reason="ok",
+    )
+    dated = CandidateLesson(
+        valid_lesson=True,
+        keywords=["opt"],
+        required_citations=["8 CFR 214.2(f)(12)(i)"],
+        guidance="Always file your OPT application before 2026-06-14.",
+        reason="ok",
+    )
+
+    for candidate in (troll, bad_cite, dated):
+        assert synthesize_lesson(_ScriptedCandidateJudge(candidate), item, corpus) is None
+
+
+def test_online_eval_learn_verifies_micro_replay_and_persists_lesson(tmp_path: Path) -> None:
+    corpus = load_corpus_map(_ROOT / "data/processed/8-cfr-214.2-f.json")
+    learned_file = tmp_path / "learned_corrections.json"
+    learned_file.write_text("[]\n", encoding="utf-8")
+
+    failing_trace = _trace(
+        trace_id="trace_learn_001",
+        question="How soon must I report losing a STEM OPT job?",
+        user_feedback=False,
+        user_feedback_comment="Missing 10-day STEM OPT rule",
+        cited_provisions=("8 CFR 214.2(f)(12)(i)",),
+    )
+    store = _FakeOnlineStore([failing_trace])
+    candidate = CandidateLesson(
+        valid_lesson=True,
+        keywords=["stem opt", "losing", "report"],
+        required_citations=["8 CFR 214.2(f)(12)(ii)(A)"],
+        guidance=(
+            "State that STEM OPT job loss must be reported within 10 days "
+            "under 8 CFR 214.2(f)(12)(ii)(A)."
+        ),
+        reason="Missed 10-day STEM reporting paragraph",
+    )
+    judge = _ScriptedCandidateJudge(candidate, grounded=True)
+    gen = _ReplayGenerator()
+
+    summary = run_online_eval(
+        store,
+        judge,
+        corpus,
+        config=OnlineEvalConfig(
+            max_judge=0,
+            learn=True,
+            max_learn=3,
+            learned_path=learned_file,
+        ),
+        generator=gen,
+        now=_NOW,
+    )
+
+    assert summary.lessons_learned == 1
+    assert summary.learned_ids == ("lc-trace_learn_",)
+    saved = load_learned_corrections(learned_file)
+    assert len(saved) == 1
+    assert saved[0].required_citations == ("8 CFR 214.2(f)(12)(ii)(A)",)
+    assert saved[0].source_trace_id == "trace_learn_001"
+
+    # Re-running against the same trace skips already-learned source_trace_id.
+    second = run_online_eval(
+        store,
+        judge,
+        corpus,
+        config=OnlineEvalConfig(max_judge=0, learn=True, learned_path=learned_file),
+        generator=gen,
+        now=_NOW,
+    )
+    assert second.lessons_learned == 0

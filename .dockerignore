@@ -15,6 +15,7 @@
 **/__pycache__
 data/*
 !data/manifest.json
+!data/learned_corrections.json
 evals
 results
 tests

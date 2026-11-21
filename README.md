@@ -18,9 +18,10 @@ code checks the model's output before anyone sees it.
 works even when the daily quota is used up).
 
 **Status:** v1 complete. The web app, `niyam ask` CLI, streaming API + user feedback endpoint,
-Langfuse tracing and `online-eval` failure-harvesting loop (D76), offline CI eval gate
+Langfuse tracing, **Layer 1** live self-correction (`pipeline.py`), **Layer 2** closed-loop
+auto-learning (`online-eval --learn` + `data/learned_corrections.json`, D77), offline CI eval gate
 (`niyam eval-gate`, D75), and live Vercel/GHCR deployment are operational with frozen baseline
-evaluations (`R4`–`R16`). Prompt, rules, and gold-set accuracy iterations are scoped to v2.
+evaluations (`R4`–`R16`). Full-benchmark accuracy iterations remain scoped to v2.
 
 ---
 
@@ -233,19 +234,27 @@ subagents, not human calibration and not Claude Opus, pending owner spot-check):
   10 verbatim message overlaps (plus 1-word diff `e01`/`p01`) between `extraction.jsonl` and
   `pipeline.jsonl`.
 
-## Observability & feedback loop
+## Observability & closed-loop self-correction
 
-Live requests stream through FastAPI (`src/niyam/api.py`) with fail-safe Langfuse tracing (D67,
-D76): one trace per live answer, per-stage spans (`extract` through `verify`), and structured
-outcome metadata (`kind`, `out_of_scope`, `withheld_reason`, `cited_provisions`,
-`findings_summaries`, and shown `explanation`) — never the raw student message. Visitors on live
-replies can click **Helpful** / **Not helpful** (with an optional note), writing an idempotent
-`user_feedback` score via `POST /api/feedback`. Out-of-band `niyam online-eval` (and the daily
-`.github/workflows/online-eval.yml` job) pulls recent Langfuse traces, runs bounded Gemma
-grounding checks against the local corpus (with provision headings), writes `online_grounded` and
-`failure_type` scores, and harvests failed or negatively rated traces into the
-`niyam-live-failures` Langfuse Dataset for human-reviewed regression tests without unsupervised
-self-modification.
+Live requests stream through FastAPI (`src/niyam/api.py`) with two continuous quality loops (D67,
+D76, D77):
+
+- **Layer 1 (live in-request self-correction):** `pipeline.py` pins matching verified lessons
+  from `data/learned_corrections.json` into retrieval and prompt reminders, includes provision
+  headings in `format_provisions()`, repairs bracketed citations and already-known written dates
+  before `check_explanation()`, and performs a 1-shot guarded retry inside `verify` when under
+  the 25 s elapsed-time budget.
+- **Layer 2 (6-hourly Langfuse learning loop):** Every 6 hours (`cron: "0 */6 * * *"`),
+  `.github/workflows/online-eval.yml` pulls recent Langfuse traces (never raw student messages),
+  grades unscored live answers with Gemma, collects visitor **Helpful / Not helpful** votes via
+  `POST /api/feedback`, harvests failures into the `niyam-live-failures` Langfuse Dataset, and
+  runs `niyam online-eval --learn`:
+  - **Gate A:** rejects transient errors, unindexed `8 CFR 214.2(f)` citations, hardcoded dates,
+    and user feedback contradicting the regulation.
+  - **Gate B:** micro-replays the failed question with the lesson (~15 s) and requires both
+    `check_explanation()` and Gemma grounding to pass.
+  - **Gate C:** runs `niyam eval-gate` and `pytest` before auto-committing
+    `data/learned_corrections.json` to `main` (triggering Vercel redeploy).
 
 ## Quick start
 
@@ -279,7 +288,7 @@ elsewhere.
 | `eval-edge OUT [--set FILE]` | Score full replies on independent edge, H-1B, and decline/security sets |
 | `eval-gate` | Verify frozen v1 baseline metrics and offline invariants (CI gate) |
 | `eval-report [OUT] [--check]` | Generate `docs/results.md` from `results/*.json` (or check freshness) |
-| `online-eval [--dry-run]` | Score recent Langfuse live traces and harvest failures into a dataset |
+| `online-eval [--learn] [--dry-run]` | Score Langfuse live traces, harvest failures, and learn verified lessons |
 | `verify-providers` | Make one live call to each provider |
 
 ### Development
@@ -304,7 +313,7 @@ src/niyam/
   evals/              retrieval, extraction, answer, pipeline, edge, gate, report, and online eval
 evals/                eval sets (JSONL)
 results/              raw output of every measurement and provisional R16 audits
-data/                 manifest and processed corpus
+data/                 manifest, processed corpus, and verified learned corrections (D77)
 web/                  Vite + React + TypeScript site (D66, D76)
 DECISIONS.md          append-only design decision log (D1, D2, ...)
 RESULTS.md            append-only measurement log (R1, R2, ...)
