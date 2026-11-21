@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import { STAGE_INFO, formatMs } from '../lib/format'
 import { STAGES, type StageTimes } from '../lib/types'
 
+const SLOW_AFTER_MS = 15_000 // D74
+const DEADLINE_S = 50 // the server's ask deadline, ASK_DEADLINE_SECONDS (D71)
+
 interface Props {
   times: StageTimes
   running: boolean
@@ -16,15 +19,21 @@ export function Pipeline({ times, running, startedAt, failed }: Props) {
   const elapsed = useElapsed(running ? startedAt : null)
   const doneCount = STAGES.filter((s) => times[s] !== undefined).length
   const current = running ? STAGES[doneCount] : undefined
+  const slow = running && elapsed >= SLOW_AFTER_MS
 
   return (
     <section className="pipeline card" aria-labelledby="pipeline-title">
       <div className="pipeline-head">
         <h2 id="pipeline-title">How this answer is being made</h2>
-        <span className="elapsed" aria-live="off">
+        <span className={`elapsed${running ? ' live' : ''}`} aria-live="off">
           {running ? `${(elapsed / 1000).toFixed(1)} s` : failed ? 'Stopped' : 'Done'}
         </span>
       </div>
+      {slow && (
+        <p className="slow-note" role="status">
+          The model is slow right now. Still working; it stops at {DEADLINE_S} s.
+        </p>
+      )}
       <div className="track" aria-hidden="true">
         <motion.div
           className={`track-fill${failed ? ' failed' : ''}`}

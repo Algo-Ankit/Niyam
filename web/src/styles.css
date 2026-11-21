@@ -394,6 +394,31 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.elapsed.live {
+  color: var(--text);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.slow-note {
+  margin: 0.25rem 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.countdown {
+  font-size: 1.05rem;
+}
+
+.countdown strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.4rem;
+}
+
+.notice .retry {
+  margin-top: 0.75rem;
+}
+
 .track {
   height: 3px;
   border-radius: 3px;

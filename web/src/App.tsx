@@ -13,6 +13,7 @@ import { ask, fetchHealth } from './lib/api'
 import { DEMO_AS_OF, DEMO_MESSAGE, replay } from './lib/demo'
 import { localToday } from './lib/format'
 import { AskError, type Reply, type Stage, type StageTimes } from './lib/types'
+import { useSecondsLeft } from './lib/useSecondsLeft'
 
 type Phase =
   | { kind: 'idle' }
@@ -24,6 +25,9 @@ export function App() {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   const [times, setTimes] = useState<StageTimes>({})
   const [snapshot, setSnapshot] = useState<string | null>(null)
+  const [blockedUntil, setBlockedUntil] = useState<number | null>(null)
+  const secondsLeft = useSecondsLeft(blockedUntil)
+  const lastMessage = useRef<string | null>(null)
   const controller = useRef<AbortController | null>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -40,6 +44,7 @@ export function App() {
     const abort = new AbortController()
     controller.current = abort
     const asOf = sample ? DEMO_AS_OF : localToday()
+    if (!sample) lastMessage.current = message
     const onStage = (stage: Stage, ms: number) => setTimes((t) => ({ ...t, [stage]: ms }))
     setTimes({})
     setPhase({ kind: 'running', startedAt: performance.now() })
@@ -51,17 +56,28 @@ export function App() {
       setPhase({ kind: 'done', reply, asOf, sample })
     } catch (error) {
       if (abort.signal.aborted) return
-      setPhase({
-        kind: 'error',
-        error: error instanceof AskError ? error : new AskError('internal', 'Something went wrong.'),
-      })
+      const askError =
+        error instanceof AskError ? error : new AskError('internal', 'Something went wrong.')
+      if (askError.kind === 'limited' && askError.retryAfterSeconds !== null) {
+        setBlockedUntil(Date.now() + askError.retryAfterSeconds * 1000)
+      }
+      setPhase({ kind: 'error', error: askError })
     }
   }
 
   const running = phase.kind === 'running'
-  // A greeting or unrelated reply skips the pipeline (D72), so its tracker would be misleading.
+  const blockedSeconds = blockedUntil !== null && secondsLeft > 0 ? secondsLeft : 0
+  const stageStarted = Object.keys(times).length > 0
+  // Hidden for a refusal before any stage (D74) and for a greeting or unrelated reply (D72):
+  // in both cases the six-stage tracker would show an empty, misleading "Stopped".
   const showPipeline =
-    phase.kind !== 'idle' && !(phase.kind === 'done' && phase.reply.kind !== 'question')
+    running ||
+    (phase.kind === 'error' && stageStarted) ||
+    (phase.kind === 'done' && phase.reply.kind === 'question')
+  const retryable =
+    phase.kind === 'error' &&
+    ['busy', 'internal', 'network'].includes(phase.error.kind) &&
+    lastMessage.current !== null
 
   return (
     <MotionConfig reducedMotion="user">
@@ -70,6 +86,7 @@ export function App() {
         <Hero>
           <AskForm
             busy={running}
+            blockedSeconds={blockedSeconds}
             sampleMessage={DEMO_MESSAGE}
             onAsk={(message) => void run(message, false)}
             onSample={() => void run(DEMO_MESSAGE, true)}
@@ -85,7 +102,17 @@ export function App() {
               failed={phase.kind === 'error'}
             />
           )}
-          {phase.kind === 'error' && <ErrorNotice error={phase.error} />}
+          {phase.kind === 'error' && (
+            <ErrorNotice
+              error={phase.error}
+              secondsLeft={blockedSeconds}
+              onRetry={
+                retryable && blockedSeconds === 0
+                  ? () => void run(lastMessage.current ?? '', false)
+                  : null
+              }
+            />
+          )}
           {phase.kind === 'done' && (
             <Results reply={phase.reply} asOf={phase.asOf} sample={phase.sample} />
           )}

@@ -665,3 +665,17 @@ and came back as a regulation answer with sources. The guardrails (rules-engine 
 checked citations) stay for every real question, because they are what make an answer safe to
 act on. *Tradeoff:* a mislabelled real question with no facts gets the capability reply; the
 student can rephrase. The reply text is fixed, not model-written, so it cannot overclaim.
+
+**D74. Raise the per-IP limit to 60 asks an hour, and make refusals and waiting visible.**
+Owner-approved on 2026-11-21. Amends D64's per-IP default (10 to 60); the daily cap (150) and
+the 50 s ask deadline (D71) are unchanged. On the site: an ask refused before any stage starts
+(hourly or daily limit) hides the pipeline card and shows one card with a live countdown to
+the next allowed ask, and the Ask button stays disabled with the same countdown. While an
+answer runs, the elapsed time is shown large, and after 15 s a line says the model is slow,
+it is still working, and it stops at 50 s; a stopped or busy ask offers Try again.
+*Why:* the site serves 4 to 5 people; at 10 an hour, one owner test locked the owner's own
+network out, and the refusal showed only as an empty pipeline card marked "Stopped". 60 an
+hour is never reached by a person but still stops a script before it drains the shared free
+Gemini quota for everyone. *Tradeoff:* the limit is keyed on the public IP, so everyone behind
+one network (home wifi, an office) shares one 60; counts stay per server instance (D69). A
+login-based limit is planned later.

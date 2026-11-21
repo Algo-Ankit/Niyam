@@ -1,6 +1,8 @@
 import { motion } from 'motion/react'
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 
+import { formatCountdown } from '../lib/format'
+
 const EXAMPLES = [
   {
     label: 'Unemployment days',
@@ -19,19 +21,22 @@ const MAX = 2000
 
 interface Props {
   busy: boolean
+  blockedSeconds: number // seconds until the question limit lifts; 0 when asking is allowed
   sampleMessage: string
   onAsk: (message: string) => void
   onSample: () => void
 }
 
-export function AskForm({ busy, sampleMessage, onAsk, onSample }: Props) {
+export function AskForm({ busy, blockedSeconds, sampleMessage, onAsk, onSample }: Props) {
   const [message, setMessage] = useState('')
   const trimmed = message.trim()
   const valid = trimmed.length >= 3 && message.length <= MAX
+  const blocked = blockedSeconds > 0
+  const canAsk = valid && !busy && !blocked
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (valid && !busy) onAsk(trimmed)
+    if (canAsk) onAsk(trimmed)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -61,11 +66,15 @@ export function AskForm({ busy, sampleMessage, onAsk, onSample }: Props) {
           <motion.button
             type="submit"
             className="primary"
-            disabled={!valid || busy}
-            whileHover={valid && !busy ? { y: -1 } : {}}
-            whileTap={valid && !busy ? { scale: 0.97 } : {}}
+            disabled={!canAsk}
+            whileHover={canAsk ? { y: -1 } : {}}
+            whileTap={canAsk ? { scale: 0.97 } : {}}
           >
-            {busy ? 'Working…' : 'Ask Niyam'}
+            {busy
+              ? 'Working…'
+              : blocked
+                ? `Ask again in ${formatCountdown(blockedSeconds)}`
+                : 'Ask Niyam'}
             <span aria-hidden="true" className="kbd">
               Ctrl ↵
             </span>

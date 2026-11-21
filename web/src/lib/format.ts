@@ -97,6 +97,14 @@ export function formatMs(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
 }
 
+/** A countdown such as "48:12", or "3:05:09" when an hour or more is left. */
+export function formatCountdown(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds))
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const [h, m, sec] = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60]
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`
+}
+
 export function localToday(): string {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')

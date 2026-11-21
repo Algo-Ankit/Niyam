@@ -75,7 +75,7 @@ class Settings(BaseSettings):
 
     # Public web API (D64). The daily cap leaves generator quota (about 2 calls per ask) for evals.
     demo_daily_cap: int = Field(default=150, gt=0)
-    asks_per_ip_per_hour: int = Field(default=10, gt=0)
+    asks_per_ip_per_hour: int = Field(default=60, gt=0)  # D74
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     # Header the host overwrites with the real client IP (Vercel: x-real-ip). Unset: the TCP peer.
     client_ip_header: str | None = None
