@@ -59,7 +59,9 @@ export function App() {
   }
 
   const running = phase.kind === 'running'
-  const showPipeline = phase.kind !== 'idle'
+  // A greeting or unrelated reply skips the pipeline (D72), so its tracker would be misleading.
+  const showPipeline =
+    phase.kind !== 'idle' && !(phase.kind === 'done' && phase.reply.kind !== 'question')
 
   return (
     <MotionConfig reducedMotion="user">

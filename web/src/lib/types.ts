@@ -30,7 +30,11 @@ export interface Provision {
   body: string
 }
 
+// `greeting` and `unrelated` replies carry only fixed text in `explanation` (D72).
+export type ReplyKind = 'question' | 'greeting' | 'unrelated'
+
 export interface Reply {
+  kind: ReplyKind
   question: string
   facts: Record<string, unknown>
   out_of_scope: string[]

@@ -264,6 +264,7 @@ def reply_json(reply: pipeline.Reply) -> dict[str, Any]:
     """The reply as the web page shows it; the explanation only if it passed the checks."""
     shown = reply.rejected_reason is None
     return {
+        "kind": reply.extraction.kind,
         "question": reply.extraction.question,
         "facts": reply.extraction.facts.model_dump(mode="json"),
         "out_of_scope": list(reply.extraction.out_of_scope),

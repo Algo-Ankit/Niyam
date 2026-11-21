@@ -1,5 +1,7 @@
 """One request end to end. Models only extract and explain; every date comes from the rules engine.
 
+A greeting or unrelated message that states no facts gets a fixed reply after step 1 (D72).
+
 Steps: (1) the generator extracts StudentFacts and the question; (2) the rules engine computes
 findings; (3) vector search finds candidates, the decision model reranks them, and the top ones
 plus the findings' own paragraphs give the provisions; (4) the generator explains using only
@@ -41,6 +43,25 @@ NOT_COVERED = (
     "covered. Your DSO (school international student adviser) or an immigration attorney can help."
 )
 DISCLAIMER = "Information from 8 CFR 214.2(f), not legal advice. Confirm deadlines with your DSO."
+Kind = Literal["question", "greeting", "unrelated"]
+_COVERAGE = (
+    "post-completion OPT, the STEM OPT extension, OPT unemployment limits and the H-1B cap-gap "
+    "extension"
+)
+_EXAMPLES = (
+    'For example: "My program ends 2027-05-15. When can I apply for OPT?" or "I started OPT on '
+    "2026-07-01 and have been unemployed since 2026-09-01. How many unemployment days do I have "
+    'left?"'
+)
+FIXED_REPLIES: dict[Literal["greeting", "unrelated"], str] = {
+    "greeting": (
+        "Hi, I'm Niyam. I answer questions about F-1 student work rules in 8 CFR 214.2(f): "
+        f"{_COVERAGE}. Tell me your dates, such as your program end date, OPT dates and jobs, "
+        "and I compute your deadlines with a rules engine and show the regulation text they "
+        f"come from. {_EXAMPLES}"
+    ),
+    "unrelated": f"I can only help with F-1 student work rules: {_COVERAGE}. {_EXAMPLES}",
+}
 Stage = Literal["extract", "rules", "retrieve", "rerank", "explain", "verify"]
 STAGES: tuple[Stage, ...] = get_args(Stage)
 StageCallback = Callable[[Stage, int], None]  # (stage, elapsed milliseconds)
@@ -83,6 +104,12 @@ _MONTHS: dict[str, int] = {
 
 
 class Extraction(BaseModel):
+    kind: Kind = Field(
+        default="question",
+        description="greeting: a greeting, thanks, or a question about the assistant itself; "
+        "unrelated: nothing to do with US immigration, visas, or studying or working in the US; "
+        "question: everything else",
+    )
     facts: StudentFacts
     question: str = Field(description="The student's question, restated in one sentence")
     out_of_scope: list[OutOfScope] = Field(
@@ -135,6 +162,8 @@ def _answer(message: str, as_of: date, services: Services, stage: "_StageTimer")
     with stage("extract"):
         extraction = extract(message, as_of, generator, level)
     stage.trace.question(extraction.question, as_of)
+    if extraction.kind != "question" and not states_facts(extraction.facts):
+        return fixed_reply(extraction, extraction.kind)
     with stage("rules"):
         assessment = assess(extraction.facts, as_of)
     with stage("retrieve"):
@@ -166,6 +195,17 @@ class _StageTimer:
             yield
         if self._on_stage is not None:
             self._on_stage(name, round((time.perf_counter() - start) * 1000))
+
+
+def states_facts(facts: StudentFacts) -> bool:
+    """Whether the student gave any fact; such a message always takes the full pipeline."""
+    return any(value is not None for value in facts.model_dump().values())
+
+
+def fixed_reply(extraction: Extraction, kind: Literal["greeting", "unrelated"]) -> Reply:
+    """The builder-written reply for a message that is not a question (D72)."""
+    explanation = Explanation(answerable=True, explanation=FIXED_REPLIES[kind], citations=[])
+    return Reply(extraction, Assessment((), ()), (), explanation, None, None)
 
 
 def top_provisions(
@@ -214,7 +254,8 @@ def render(reply: Reply) -> str:
     lines.append("")
     if reply.rejected_reason is None:
         lines.append(reply.explanation.explanation)
-        lines.append(f"Sources: {', '.join(reply.explanation.citations)}")
+        if reply.explanation.citations:
+            lines.append(f"Sources: {', '.join(reply.explanation.citations)}")
     else:
         lines.append(f"Explanation withheld: it {reply.rejected_reason}.")
     if reply.rerank_error is not None:
@@ -300,7 +341,10 @@ def _extraction_prompt(message: str, as_of: date) -> str:
         "job for a period without work (for example 'unemployed since'). Set a job's "
         "related_to_major and hours_per_week only if the student says them. Never repeat "
         "sensitive personal identifiers (SSN, passport number, A-number, SEVIS ID) in the "
-        "restated question. List topics outside F-1 student rules in out_of_scope.\n\n"
+        "restated question. List topics outside F-1 student rules in out_of_scope. Set kind to "
+        "greeting for a greeting, thanks or a question about you, unrelated for a message with "
+        "nothing to do with US immigration, visas, or studying or working in the US, and "
+        "question otherwise.\n\n"
         f"Message:\n{message}"
     )
 

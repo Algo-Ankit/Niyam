@@ -36,6 +36,16 @@ export function Results({ reply, asOf, sample }: Props) {
     )
   }
 
+  if (reply.kind !== 'question') {
+    return (
+      <motion.section className="results" variants={list} initial="hidden" animate="show">
+        <motion.div variants={rise} className="card answer">
+          <p className="explanation">{reply.explanation}</p>
+        </motion.div>
+      </motion.section>
+    )
+  }
+
   const dated = reply.findings.filter((f) => f.opens || f.closes)
   const facts = Object.entries(reply.facts).filter(
     ([, value]) => value !== null && !(Array.isArray(value) && value.length === 0),

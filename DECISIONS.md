@@ -651,3 +651,17 @@ abandoned early and up to two more attempts fit inside the deadline. *Tradeoff:*
 call that would have succeeded after 15 s is cut and retried; the locally measured 8.9 s for a
 tiny prompt shows headroom is not large, so the value is a setting and is checked again in the
 live test.
+
+**D72. Route greetings and unrelated messages away from the legal pipeline.**
+Owner-approved on 2026-11-21. The extraction step also labels the message's `kind`: `question`
+(anything about studying or working in the US on a student visa), `greeting` (hello, thanks,
+or a question about the assistant itself) or `unrelated` (nothing to do with that). A
+`greeting` or `unrelated` message that states no facts gets a fixed, builder-written reply
+(what Niyam covers, with example questions) and skips rules, retrieval, rerank, explain and
+verify. Any message with a stated fact always takes the full pipeline. The reply carries
+`kind`, and the site shows non-question replies as one plain card.
+*Why:* in the live site "hello, what can you do" ran all six stages and about five model calls
+and came back as a regulation answer with sources. The guardrails (rules-engine dates,
+checked citations) stay for every real question, because they are what make an answer safe to
+act on. *Tradeoff:* a mislabelled real question with no facts gets the capability reply; the
+student can rephrase. The reply text is fixed, not model-written, so it cannot overclaim.
