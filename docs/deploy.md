@@ -67,8 +67,19 @@ uvicorn trusts that header only from peers in `FORWARDED_ALLOW_IPS` (image defau
 ranges and 127.0.0.1) and takes the right-most untrusted address; `FORWARDED_ALLOW_IPS=*` would
 let clients spoof their IP. Alternatively set `CLIENT_IP_HEADER` to a header the proxy overwrites.
 
-## CI
+## CI & Scheduled Online Eval
 
-`.github/workflows/ci.yml` runs on every push and pull request: `python` (ruff, ruff format,
-mypy, pytest through `scripts/bootstrap.sh`), `web` (`npm ci`, typecheck, build) and `container`
-(build, smoke test, publish from `main`). There is no eval gate yet.
+- **`.github/workflows/ci.yml`** runs on every push and pull request:
+  - `python`: bootstraps `.tools/` + `.venv`, runs `ruff check .`, `ruff format --check .`,
+    `mypy`, `pytest`, `niyam eval-gate` (verifying frozen R5–R15 baselines + deterministic
+    invariants, D75), and `niyam eval-report --check` (verifying `docs/results.md` is up to date).
+  - `web`: `npm ci`, `npm run typecheck`, `npm run build`.
+  - `container`: builds the Docker image, checks `GET /api/health` and the non-root user, and on
+    `main` publishes `ghcr.io/algo-ankit/niyam-api`.
+- **`.github/workflows/online-eval.yml`** runs daily at `03:00 UTC` (or manually via
+  `workflow_dispatch`) to execute `niyam online-eval` against Langfuse Cloud traces (D76) and
+  upload `online-failures.jsonl` as an artifact when any failures are harvested.
+  - Required GitHub Actions secrets (`Settings > Secrets and variables > Actions`):
+    `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `GEMINI_API_KEY` (optional `LANGFUSE_HOST`,
+    defaults to `https://cloud.langfuse.com`). If any secret is missing, scheduled runs skip
+    cleanly (`exit 0`) while manual dispatches fail with a setup message.

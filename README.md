@@ -17,10 +17,10 @@ code checks the model's output before anyone sees it.
 **Live demo:** https://niyam-flame.vercel.app (free-tier models; "Watch a recorded answer"
 works even when the daily quota is used up).
 
-**Status:** live MVP with complete baseline evaluations (R4–R15). The web app, `niyam ask` CLI,
-and streaming API are live, and all retrieval, extraction, answer-quality, whole-pipeline, and
-independent edge/H-1B/security baselines have been measured. Judge calibration and prompt/rules
-iterations on the R11/R13 misses are next.
+**Status:** v1 complete. The web app, `niyam ask` CLI, streaming API + user feedback endpoint,
+Langfuse tracing and `online-eval` failure-harvesting loop (D76), offline CI eval gate
+(`niyam eval-gate`, D75), and live Vercel/GHCR deployment are operational with frozen baseline
+evaluations (`R4`–`R16`). Prompt, rules, and gold-set accuracy iterations are scoped to v2.
 
 ---
 
@@ -84,6 +84,8 @@ The output always has the same shape:
 - the 14-month limit after completion of study
 - unemployment days against the 90-day (OPT) and 150-day (with STEM) limits
 - STEM OPT filing window, extension period, and reporting obligations
+- H-1B cap-gap extension and post-cap-gap departure date (flagging the SEVP 60-day vs 2026
+  30-day rule conflict; D51, D53)
 - the departure period after OPT ends
 
 Where the regulation is silent, the engine follows written conventions (decision D44). For
@@ -101,8 +103,10 @@ be reproduced with `niyam corpus-fetch`, and its SHA-256 is recorded in `data/ma
 ## Measured results
 
 Every number below was produced by code in this repo. `RESULTS.md` records the exact command,
-commit and raw output file for each one (cited as R#N). The eval sets were written by the
-builder and have not yet been reviewed by the owner, so treat these numbers as provisional.
+commit and raw output file for each one (cited as R#N), and
+[docs/results.md](docs/results.md) is code-generated directly from `results/*.json` (verified in
+CI by `niyam eval-report --check`). Under **D75**, `R5`–`R15` are frozen as Niyam's v1
+baselines; owner spot-check of `R16` is pending, so treat model-judged scores as provisional.
 
 **Retrieval** (gold = the regulation paragraph that answers the question)
 
@@ -214,6 +218,35 @@ Because this is a domain-specific adversarial set with no external industry benc
 frozen as Niyam's baseline: starting from 100% measured safety and improving completeness/referral
 templates is far safer than tuning a permissive model down.
 
+**Provisional judge & gold-set audit** (R16; automated read-only audit by Gemini planning
+subagents, not human calibration and not Claude Opus, pending owner spot-check):
+
+- **Judge verdict audit** (`N = 30` stratified cases across R10–R15, `seed = 42`): exact
+  multi-dimension agreement `0.667` (20 / 30), individual-dimension agreement `0.817` (49 / 60):
+  edge `says_required` `0.750` (15 / 20, κ `0.500`), `avoids_forbidden` `0.850` (17 / 20,
+  κ `-0.071`), QA `correct` `0.800` (8 / 10, κ `0.583`), `grounded` `0.900` (9 / 10, κ `0.000`).
+  Gemma was more lenient in 6 cases (`y008`, `x005`, `x010`, `x021`, `p25`, `d34`) and stricter in
+  4 (`h006`, `h022`, `x052`, `p20`).
+- **Gold-set audit** (`N = 150` items across `retrieval-dev`, `retrieval-test`, `extraction`,
+  `pipeline`): 127 clean, 4 high (missing `context` provisions in `retrieval-dev.jsonl` on `d07`,
+  `d12`, `d15`, `d31`, causing all 4 R15 false abstentions), 4 medium, 15 low (R16). Also noted
+  10 verbatim message overlaps (plus 1-word diff `e01`/`p01`) between `extraction.jsonl` and
+  `pipeline.jsonl`.
+
+## Observability & feedback loop
+
+Live requests stream through FastAPI (`src/niyam/api.py`) with fail-safe Langfuse tracing (D67,
+D76): one trace per live answer, per-stage spans (`extract` through `verify`), and structured
+outcome metadata (`kind`, `out_of_scope`, `withheld_reason`, `cited_provisions`,
+`findings_summaries`, and shown `explanation`) — never the raw student message. Visitors on live
+replies can click **Helpful** / **Not helpful** (with an optional note), writing an idempotent
+`user_feedback` score via `POST /api/feedback`. Out-of-band `niyam online-eval` (and the daily
+`.github/workflows/online-eval.yml` job) pulls recent Langfuse traces, runs bounded Gemma
+grounding checks against the local corpus (with provision headings), writes `online_grounded` and
+`failure_type` scores, and harvests failed or negatively rated traces into the
+`niyam-live-failures` Langfuse Dataset for human-reviewed regression tests without unsupervised
+self-modification.
+
 ## Quick start
 
 Requirements: Windows or Unix with bash, a Gemini API key (free tier), and a Postgres database
@@ -244,6 +277,9 @@ elsewhere.
 | `eval-answers OUT` | Score answers given the gold provisions (judge: Gemma) |
 | `eval-pipeline OUT` | Score the whole assistant on in-scope and out-of-scope scenarios |
 | `eval-edge OUT [--set FILE]` | Score full replies on independent edge, H-1B, and decline/security sets |
+| `eval-gate` | Verify frozen v1 baseline metrics and offline invariants (CI gate) |
+| `eval-report [OUT] [--check]` | Generate `docs/results.md` from `results/*.json` (or check freshness) |
+| `online-eval [--dry-run]` | Score recent Langfuse live traces and harvest failures into a dataset |
 | `verify-providers` | Make one live call to each provider |
 
 ### Development
@@ -264,13 +300,15 @@ src/niyam/
   corpus/             download, eCFR XML parser, corpus build
   rules/              OPT and STEM OPT rules engine, business-day calendar
   retrieval/          Postgres keyword and vector search, fusion, HyDE
-  assistant/          the `niyam ask` pipeline and output checks
-  evals/              retrieval, extraction, answer and pipeline evals; judge; bootstrap stats
+  assistant/          the `niyam ask` pipeline, output checks, and Langfuse tracing
+  evals/              retrieval, extraction, answer, pipeline, edge, gate, report, and online eval
 evals/                eval sets (JSONL)
-results/              raw output of every measurement
+results/              raw output of every measurement and provisional R16 audits
 data/                 manifest and processed corpus
+web/                  Vite + React + TypeScript site (D66, D76)
 DECISIONS.md          append-only design decision log (D1, D2, ...)
 RESULTS.md            append-only measurement log (R1, R2, ...)
+docs/results.md       code-generated evaluation summary (verified in CI)
 ```
 
 ## Engineering principles
@@ -293,24 +331,35 @@ RESULTS.md            append-only measurement log (R1, R2, ...)
 - Some rules-engine conventions, such as when unemployment days start counting, may differ from
   SEVIS or USCIS practice in edge cases. They are always shown as assumptions.
 - One message, one answer. There is no conversation history.
-- The eval sets are small, written by the builder, and not yet owner-reviewed. The answer judge
-  is uncalibrated until the owner has labelled a sample of its verdicts.
+- The v1 eval baselines (`R5`–`R15`) are frozen; the builder-written sets await owner review
+  (`10` messages also overlap between `extraction.jsonl` and `pipeline.jsonl`), and the `R16`
+  judge/gold audit is provisional (automated Gemini subagents, not human calibration) pending
+  owner spot-check.
+- The offline CI gate checks deterministic invariants and recomputed baseline reports without
+  calling live LLMs in CI.
 
 ## Roadmap
 
 - [x] Provider verification, model layer, cache, rate limiter, spend ledger
 - [x] Corpus: parse and index 8 CFR 214.2(f)
-- [x] Rules engine for OPT and STEM OPT deadlines
+- [x] Rules engine for OPT, STEM OPT, and H-1B cap-gap deadlines
 - [x] Retrieval evaluation (keyword, vector, hybrid, HyDE, reranking)
 - [x] `niyam ask` pipeline with code-checked output
 - [x] Independent decline & security baseline evaluation (R10)
 - [x] Complete baseline pipeline, answer, H-1B, and edge evaluations (R11–R15)
-- [ ] Calibrate the Gemma judge against ~30 owner-labelled verdicts
-- [ ] Improve decline/referral completeness, cap-gap/scope edge cases, and adversarial citation retention over R10/R11/R13
-- [x] Web app (TypeScript) over a streaming API, with Langfuse tracing
+- [x] Provisional judge and gold-set audit (R16), plus code-generated `docs/results.md`
+- [x] Web app (TypeScript) over a streaming API, with Langfuse tracing and thumbs feedback
 - [x] Public deployment on Vercel, CI, and a published container image
-- [ ] Online evaluation of live answers
-- [ ] CI regression gate on eval scores
+- [x] Online evaluation & failure-harvesting dataset flywheel (`niyam online-eval`)
+- [x] Offline CI regression gate (`niyam eval-gate` & `eval-report --check`)
+
+### Next (v2)
+
+- [ ] Owner spot-check of `R16` audit and human calibration of the judge
+- [ ] Fix `d07`/`d12`/`d15`/`d31` gold `context`, include headings in `format_provisions()`, and
+      fix `_stem_filing_window` clamping in `opt.py`
+- [ ] Improve decline/referral completeness, cap-gap/scope edge cases, and messy-input extraction
+      over `R10`/`R11`/`R13`, plus add a held-out extraction/pipeline v2 split
 
 ## License
 
