@@ -1,26 +1,29 @@
 ## Goal & Git state
 Goal: F-1 student work-rules assistant (OPT, STEM OPT, H-1B cap-gap) over 8 CFR 214.2(f), with evals and monitoring (D42).
-Branch main, last commit c978880 "Document R10 safety-first baseline context in README", pushed. Untracked: results/edge-1.log, results/edge-decline-1.log.
+Branch main, last commit 122d49a "Document the live Vercel deployment and the published container", pushed. Untracked: results/edge-1.log, results/edge-decline-1.log, results/retrieval-test-rerank-1.log.
 
 ## Done & Verified
-- D58, D59, D60b, D61: fixed rules-engine, guardrail, and scorer bugs from gold audit; separated retrieval gold from answer-eval context; relabelled h1b_cases.jsonl to D57 scope (11 in / 6 partial / 53 out). Verified: full suite, 131 passed at cc17698.
-- D60: rewrote docs/PROJECT_CONTEXT.md for the F-1 product (merged via PR #1 at 6ba72b3).
-- D62: opened read-only CLI/eval Postgres connections (`eval-edge`, `eval-pipeline`, `eval-retrieval`, `search`, `ask`) with `autocommit=True` so Neon `idle_in_transaction_session_timeout` cannot kill long eval runs; added stderr per-case progress logging and `tests/test_cli.py`. Verified: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` (131 passed at 4736f7e).
-- R10: completed independent decline/security eval (`results/edge-decline-1.json`, 40 cases): `passed=0.513` (`judge_failed=1` on `y031`, `no_leak=1.0`, `avoids_forbidden=1.0`, `asks_ok=1.0`, `scope_ok=0.9`, `says_required=0.538`). Verified by `uv run niyam eval-edge results/edge-decline-1.json --set evals/independent/decline_and_security.jsonl`.
-- Updated `README.md` with R9 reranking results, R10 decline/security baseline table, and domain safety-first rationale (4736f7e, c978880).
+- Phase 4 shipped. Verified: full suite 156 passed at 122d49a (pre-commit hook); GitHub CI green (python, web, container).
+- D64: `POST /api/ask` streams stage events (SSE) then the reply; per-IP hourly limit + per-quota-day cap; generic busy/internal errors. Verified: tests/test_api.py and one live ask.
+- D66: TypeScript site in `web/` (Vite, React, Motion), recorded-answer replay. Verified: `npm run build --prefix web`, browser check desktop/mobile/light.
+- D67 Langfuse tracing; D69 flush after reply. Verified: owner saw the live trace in Langfuse.
+- D68/D69: Dockerfile + HEALTHCHECK; CI builds, smoke-tests and publishes `ghcr.io/algo-ankit/niyam-api` (public; verified by anonymous manifest pull).
+- D69/D70/D71: live on Vercel at https://niyam-flame.vercel.app (Services `api` + `web`, one origin); 50 s ask deadline. Verified: live `/api/health`, live ask (all 6 stages + reply), site in Chrome.
+- R12: rerank confirmed on retrieval test split. Unverified: per-IP limit reads real IP on Vercel (relies on Vercel docs for `x-real-ip`).
 
 ## Open questions
-- Owner locked R10 as the decline/security baseline for now and skipped further eval runs today; decide next session whether to run the remaining evals (`eval-answers`, `eval-pipeline`, `edge_cases.jsonl`, `h1b_cases.jsonl`) or start Phase 4 (web app / Langfuse).
-- Gold of the builder-written sets (retrieval dev/test, extraction, pipeline) still awaits full owner review beyond D58-D60b fixes.
+- Gold of builder-written sets (retrieval dev/test, extraction, pipeline) still awaits owner review; judge uncalibrated (owner labels ~30 verdicts).
+- Optional: rename Vercel domain (Project > Settings > Domains); paste new GitHub About text drafted in the archived 4c session.
 
 ## Gotchas
-- A crashed eval loses only its report: the response cache replays finished calls free, so rerun the same command.
-- Background runs: end the command with `exit $status`, or a crash reports as success.
-- Limits: generator 500 RPD (about 2 calls per edge case); judge gemma-4-31b-it about 4 calls/min and sometimes overloaded (503) or malformed. A new API key fixes neither.
-- `uv` is `.tools/bootstrap/Scripts/uv.exe`. Pipe `< /dev/null` into one-off `uv run python` in Git Bash. Deny rules block .env, .venv, .tools.
-- The review page bakes in gold as of 253cd0c; after D59-D61 gold edits, rebuild cases.js and republish it to the same URL if used.
+- Antigravity's `eval-edge` on `edge_cases.jsonl` was still running at handover (writes results/edge-cases-1.json); it shares the Gemini quota with the live site.
+- While an eval runs, `niyam.exe` is locked: commit with `UV_NO_SYNC=1` so the hook's `uv run` skips reinstalling (checks still run).
+- Gemini 503s can take ~30 s each; live asks then hit the D71 busy message. Response cache is per Vercel instance (`/tmp`).
+- Vercel resolves the service entrypoint from the repo root: keep `src.niyam.asgi:app` in vercel.json. Generated deployment URLs are login-protected; the production domain is public.
+- A crashed eval loses only its report: the response cache replays finished calls free. Background runs: end with `exit $status`.
+- `uv` is `.tools/bootstrap/Scripts/uv.exe`; pipe `< /dev/null` into one-off `uv run python`. Deny rules block .env, .venv, .tools.
 
 ## Next step
-Wait for owner direction on whether to run the next baseline eval (`uv run niyam eval-pipeline results/pipeline-1.json` or `eval-edge` on `edge_cases.jsonl` / `h1b_cases.jsonl`) or proceed to Phase 4 (web app + Langfuse tracing).
+When results/edge-cases-1.json exists, append it to RESULTS.md as R13 (command `uv run niyam eval-edge results/edge-cases-1.json --set evals/independent/edge_cases.jsonl`, its commit from the JSON), then run `uv run niyam eval-pipeline results/pipeline-1.json` in the background.
 
-Records: DECISIONS.md latest D62, RESULTS.md latest R10.
+Records: DECISIONS.md latest D71, RESULTS.md latest R12.
