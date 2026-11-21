@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -301,3 +302,55 @@ def test_feedback_validation_rate_limit_and_error_safety() -> None:
     assert first.status_code == 200 and first.json() == {"recorded": False}
     limited = client.post("/api/feedback", json={"trace_id": "trace_valid_123", "helpful": True})
     assert limited.status_code == 429 and int(limited.headers["retry-after"]) > 0
+
+
+def test_ask_passes_history_and_prior_facts_to_answerer() -> None:
+    seen: list[tuple[tuple[pipeline.Turn, ...], StudentFacts | None]] = []
+
+    def context_answer(
+        message: str,
+        as_of: date,
+        on_stage: pipeline.StageCallback,
+        *,
+        history: Sequence[pipeline.Turn] = (),
+        prior_facts: StudentFacts | None = None,
+    ) -> pipeline.Reply:
+        seen.append((tuple(history), prior_facts))
+        for stage in pipeline.STAGES:
+            on_stage(stage, 5)
+        return _reply()
+
+    client = _client(context_answer)
+    response = client.post(
+        "/api/ask",
+        json={
+            "message": "What if my DSO recommended OPT on 2026-05-20?",
+            "as_of": AS_OF.isoformat(),
+            "history": [{"question": "When must I file?", "answer": "File by 2026-06-14."}],
+            "prior_facts": {"program_end_date": "2026-05-15"},
+        },
+    )
+    assert response.status_code == 200
+    assert _events(response.text)[-1][0] == "reply"
+    assert seen == [
+        (
+            (pipeline.Turn("When must I file?", "File by 2026-06-14."),),
+            StudentFacts(program_end_date=date(2026, 5, 15)),
+        )
+    ]
+
+
+def test_ask_rejects_history_over_six_turns_or_invalid_prior_facts() -> None:
+    client = _client(_answering(_reply()))
+    too_many = [{"question": f"Q{i}", "answer": f"A{i}"} for i in range(7)]
+    assert (
+        client.post("/api/ask", json={"message": "Follow up?", "history": too_many}).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/ask",
+            json={"message": "Follow up?", "prior_facts": {"program_end_date": "not-a-date"}},
+        ).status_code
+        == 422
+    )

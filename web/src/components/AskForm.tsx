@@ -2,6 +2,7 @@ import { motion } from 'motion/react'
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { formatCountdown } from '../lib/format'
+import { MAX_HISTORY_TURNS } from '../lib/types'
 
 const EXAMPLES = [
   {
@@ -25,9 +26,21 @@ interface Props {
   sampleMessage: string
   onAsk: (message: string) => void
   onSample: () => void
+  followUp?: boolean
+  turnCount?: number
+  onReset?: () => void
 }
 
-export function AskForm({ busy, blockedSeconds, sampleMessage, onAsk, onSample }: Props) {
+export function AskForm({
+  busy,
+  blockedSeconds,
+  sampleMessage,
+  onAsk,
+  onSample,
+  followUp = false,
+  turnCount = 0,
+  onReset,
+}: Props) {
   const [message, setMessage] = useState('')
   const trimmed = message.trim()
   const valid = trimmed.length >= 3 && message.length <= MAX
@@ -36,26 +49,52 @@ export function AskForm({ busy, blockedSeconds, sampleMessage, onAsk, onSample }
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (canAsk) onAsk(trimmed)
+    if (!canAsk) return
+    onAsk(trimmed)
+    setMessage('')
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit(event)
   }
 
+  const inputId = followUp ? 'followup-message' : 'message'
+
   return (
-    <form className="ask" onSubmit={submit}>
-      <label htmlFor="message" className="sr-only">
-        Describe your situation and ask your question
+    <form className={followUp ? 'ask ask-followup' : 'ask'} onSubmit={submit}>
+      {followUp && (
+        <div className="followup-head">
+          <div className="followup-meta">
+            <span className="followup-badge">Follow-up</span>
+            <span className="muted small">
+              Remembers up to {MAX_HISTORY_TURNS} turns on this page ({turnCount} asked · cleared on
+              reload or exit)
+            </span>
+          </div>
+          {onReset && (
+            <button type="button" className="chip" disabled={busy} onClick={onReset}>
+              New conversation
+            </button>
+          )}
+        </div>
+      )}
+      <label htmlFor={inputId} className="sr-only">
+        {followUp
+          ? 'Ask a follow-up question or share more dates'
+          : 'Describe your situation and ask your question'}
       </label>
       <div className="ask-box">
         <textarea
-          id="message"
+          id={inputId}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="e.g. I graduated 2026-05-15 and my DSO recommended OPT on 2026-05-20. When must I file?"
-          rows={4}
+          placeholder={
+            followUp
+              ? "Ask a follow-up — add a missing date, ask 'what if…', or ask about another rule (e.g. And my DSO recommended OPT on 2027-03-01)…"
+              : 'e.g. I graduated 2026-05-15 and my DSO recommended OPT on 2026-05-20. When must I file?'
+          }
+          rows={followUp ? 3 : 4}
           maxLength={MAX}
           disabled={busy}
         />
@@ -74,36 +113,40 @@ export function AskForm({ busy, blockedSeconds, sampleMessage, onAsk, onSample }
               ? 'Working…'
               : blocked
                 ? `Ask again in ${formatCountdown(blockedSeconds)}`
-                : 'Ask Niyam'}
+                : followUp
+                  ? 'Ask follow-up'
+                  : 'Ask Niyam'}
             <span aria-hidden="true" className="kbd">
               Ctrl ↵
             </span>
           </motion.button>
         </div>
       </div>
-      <div className="examples">
-        <span className="examples-label">Try:</span>
-        {EXAMPLES.map((example) => (
+      {!followUp && (
+        <div className="examples">
+          <span className="examples-label">Try:</span>
+          {EXAMPLES.map((example) => (
+            <button
+              key={example.label}
+              type="button"
+              className="chip"
+              disabled={busy}
+              onClick={() => setMessage(example.text)}
+            >
+              {example.label}
+            </button>
+          ))}
           <button
-            key={example.label}
             type="button"
-            className="chip"
+            className="chip ghost"
             disabled={busy}
-            onClick={() => setMessage(example.text)}
+            onClick={onSample}
+            title={sampleMessage}
           >
-            {example.label}
+            ▶ Watch a recorded answer
           </button>
-        ))}
-        <button
-          type="button"
-          className="chip ghost"
-          disabled={busy}
-          onClick={onSample}
-          title={sampleMessage}
-        >
-          ▶ Watch a recorded answer
-        </button>
-      </div>
+        </div>
+      )}
     </form>
   )
 }

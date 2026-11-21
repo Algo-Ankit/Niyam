@@ -50,6 +50,21 @@ export interface Reply {
   not_covered: string
 }
 
+export const MAX_HISTORY_TURNS = 6
+
+export interface HistoryTurn {
+  question: string
+  answer: string | null
+}
+
+export interface ConversationTurn {
+  id: number
+  message: string
+  reply: Reply
+  asOf: string
+  times: StageTimes
+}
+
 export type StageTimes = Partial<Record<Stage, number>>
 
 export type AskErrorKind = 'busy' | 'internal' | 'limited' | 'invalid' | 'network'

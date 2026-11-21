@@ -5,12 +5,13 @@ then one `reply` event, or one `error` event. Asks are limited per client and pe
 because the free generator quota is shared with the evals.
 """
 
+import inspect
 import json
 import logging
 import queue
 import threading
 from collections import deque
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -36,6 +37,7 @@ from niyam.models.errors import (
 )
 from niyam.models.factory import ModelSuite, build_models
 from niyam.models.ledger import QUOTA_TIMEZONE, quota_day
+from niyam.rules.opt import StudentFacts
 
 Answerer = Callable[[str, date, pipeline.StageCallback], pipeline.Reply]
 
@@ -51,9 +53,16 @@ _BUSY_ERRORS = (
 _log = logging.getLogger(__name__)
 
 
+class HistoryTurn(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str | None = Field(default=None, max_length=1500)
+
+
 class AskRequest(BaseModel):
     message: str = Field(min_length=3, max_length=2000)
     as_of: date | None = None  # the student's local date; the server's date if omitted
+    history: list[HistoryTurn] = Field(default_factory=list, max_length=pipeline.MAX_HISTORY_TURNS)
+    prior_facts: StudentFacts | None = None
 
 
 class FeedbackRequest(BaseModel):
@@ -179,8 +188,15 @@ def build_app(  # noqa: PLR0913  # each argument is a separate deployment concer
                 detail=refusal.message,
                 headers={"Retry-After": str(refusal.retry_after_seconds)},
             )
+        history = tuple(pipeline.Turn(t.question, t.answer) for t in body.history)
         events = _events(
-            answerer, body.message, body.as_of or date.today(), after_reply, deadline_seconds
+            answerer,
+            body.message,
+            body.as_of or date.today(),
+            after_reply,
+            deadline_seconds,
+            history=history,
+            prior_facts=body.prior_facts,
         )
         return StreamingResponse(
             events,
@@ -210,7 +226,14 @@ def build_app(  # noqa: PLR0913  # each argument is a separate deployment concer
 
 
 def _live_answerer(settings: Settings, models: ModelSuite, tracer: Tracer) -> Answerer:
-    def answer(message: str, as_of: date, on_stage: pipeline.StageCallback) -> pipeline.Reply:
+    def answer(
+        message: str,
+        as_of: date,
+        on_stage: pipeline.StageCallback,
+        *,
+        history: Sequence[pipeline.Turn] = (),
+        prior_facts: StudentFacts | None = None,
+    ) -> pipeline.Reply:
         # A connection per ask, closed before the stream ends: Neon drops idle ones (D63).
         with psycopg.connect(
             settings.database_url.get_secret_value(), connect_timeout=20, autocommit=True
@@ -223,7 +246,9 @@ def _live_answerer(settings: Settings, models: ModelSuite, tracer: Tracer) -> An
                 settings.generation_thinking_level,
                 tracer,
             )
-            return pipeline.answer(message, as_of, services, on_stage)
+            return pipeline.answer(
+                message, as_of, services, on_stage, history=history, prior_facts=prior_facts
+            )
 
     return answer
 
@@ -238,12 +263,38 @@ def _client_ip(request: Request, client_ip_header: str | None) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _events(
+def _accepts_context(answerer: Answerer) -> bool:
+    params = inspect.signature(answerer).parameters.values()
+    names = {p.name for p in params}
+    has_var_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
+    return has_var_kw or {"history", "prior_facts"}.issubset(names)
+
+
+def _call_answerer(  # noqa: PLR0913  # forwards request and optional follow-up context
+    answerer: Answerer,
+    message: str,
+    as_of: date,
+    on_stage: pipeline.StageCallback,
+    *,
+    history: tuple[pipeline.Turn, ...],
+    prior_facts: StudentFacts | None,
+) -> pipeline.Reply:
+    if _accepts_context(answerer):
+        return answerer(  # type: ignore[call-arg]
+            message, as_of, on_stage, history=history, prior_facts=prior_facts
+        )
+    return answerer(message, as_of, on_stage)
+
+
+def _events(  # noqa: PLR0913
     answerer: Answerer,
     message: str,
     as_of: date,
     after_reply: Callable[[], None],
     deadline_seconds: float,
+    *,
+    history: tuple[pipeline.Turn, ...] = (),
+    prior_facts: StudentFacts | None = None,
 ) -> Iterator[str]:
     """Runs the answerer in a thread and yields its stages, then the reply or an error.
 
@@ -256,7 +307,10 @@ def _events(
 
     def work() -> None:
         try:
-            events.put(_sse("reply", reply_json(answerer(message, as_of, on_stage))))
+            reply = _call_answerer(
+                answerer, message, as_of, on_stage, history=history, prior_facts=prior_facts
+            )
+            events.put(_sse("reply", reply_json(reply)))
         except _BUSY_ERRORS as error:
             _log.warning("ask refused by the model layer: %s", type(error).__name__)
             events.put(_sse("error", {"code": "busy", "message": BUSY}))

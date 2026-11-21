@@ -9,7 +9,7 @@ export function Footer({ snapshot }: { snapshot: string | null }) {
       </p>
       <p className="muted">
         {snapshot ? `Regulation text as of ${formatDate(snapshot)} (eCFR). ` : ''}
-        One question, one answer, no accounts.{' '}
+        Follow-up questions stay in this page only and clear on reload. No accounts.{' '}
         <a href="https://github.com/Algo-Ankit/Niyam" target="_blank" rel="noreferrer">
           Source on GitHub
         </a>

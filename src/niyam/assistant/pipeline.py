@@ -67,6 +67,7 @@ Stage = Literal["extract", "rules", "retrieve", "rerank", "explain", "verify"]
 STAGES: tuple[Stage, ...] = get_args(Stage)
 StageCallback = Callable[[Stage, int], None]  # (stage, elapsed milliseconds)
 RETRIEVAL_K = 5
+MAX_HISTORY_TURNS = 6
 LEARNED_CORRECTIONS_PATH = Path("data/learned_corrections.json")
 RETRY_BUDGET_SECONDS = 25.0
 _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
@@ -204,6 +205,14 @@ def match_learned_corrections(
 
 
 @dataclass(frozen=True)
+class Turn:
+    """One prior conversation turn passed into `extract()` for follow-up context (D78)."""
+
+    question: str
+    answer: str | None = None
+
+
+@dataclass(frozen=True)
 class Reply:
     extraction: Extraction
     assessment: Assessment
@@ -224,12 +233,25 @@ class Services:
     tracer: Tracer = NO_TRACING
 
 
-def answer(
-    message: str, as_of: date, services: Services, on_stage: StageCallback | None = None
+def answer(  # noqa: PLR0913  # optional follow-up history and prior_facts preserve CLI/eval signatures
+    message: str,
+    as_of: date,
+    services: Services,
+    on_stage: StageCallback | None = None,
+    *,
+    history: Sequence[Turn] = (),
+    prior_facts: StudentFacts | None = None,
 ) -> Reply:
     """The full reply; `on_stage(stage, ms)` is called as each of `STAGES` finishes."""
     with services.tracer.trace() as trace:
-        reply = _answer(message, as_of, services, _StageTimer(on_stage, trace))
+        reply = _answer(
+            message,
+            as_of,
+            services,
+            _StageTimer(on_stage, trace),
+            history=history,
+            prior_facts=prior_facts,
+        )
         shown = reply.rejected_reason is None
         details = TraceDetails(
             kind=reply.extraction.kind,
@@ -250,14 +272,29 @@ def answer(
         return replace(reply, trace_id=trace.trace_id)
 
 
-def _answer(message: str, as_of: date, services: Services, stage: "_StageTimer") -> Reply:
+def _answer(  # noqa: PLR0913  # optional follow-up history and prior_facts passed to extract()
+    message: str,
+    as_of: date,
+    services: Services,
+    stage: "_StageTimer",
+    *,
+    history: Sequence[Turn] = (),
+    prior_facts: StudentFacts | None = None,
+) -> Reply:
     started = time.perf_counter()
     generator, level = services.generator, services.thinking_level
     with stage("extract"):
-        extraction = extract(message, as_of, generator, level)
+        extraction = extract(
+            message, as_of, generator, level, history=history, prior_facts=prior_facts
+        )
     stage.trace.question(extraction.question, as_of)
-    if extraction.kind != "question" and not states_facts(extraction.facts):
-        return fixed_reply(extraction, extraction.kind)
+    if extraction.kind != "question" and not _has_new_facts(extraction.facts, prior_facts):
+        carried = (
+            prior_facts
+            if (prior_facts is not None and not states_facts(extraction.facts))
+            else extraction.facts
+        )
+        return fixed_reply(extraction.model_copy(update={"facts": carried}), extraction.kind)
     matched = match_learned_corrections(extraction.question, load_learned_corrections())
     extra_citations = [c for item in matched for c in item.required_citations]
     guidance = tuple(item.guidance for item in matched)
@@ -342,6 +379,13 @@ class _StageTimer:
 def states_facts(facts: StudentFacts) -> bool:
     """Whether the student gave any fact; such a message always takes the full pipeline."""
     return any(value is not None for value in facts.model_dump().values())
+
+
+def _has_new_facts(facts: StudentFacts, prior_facts: StudentFacts | None) -> bool:
+    """True if `facts` states any fact not already present in `prior_facts`."""
+    if prior_facts is None:
+        return states_facts(facts)
+    return states_facts(facts) and facts != prior_facts
 
 
 def fixed_reply(extraction: Extraction, kind: Literal["greeting", "unrelated"]) -> Reply:
@@ -453,11 +497,18 @@ def render(reply: Reply) -> str:
     return "\n".join(lines)
 
 
-def extract(
-    message: str, as_of: date, generator: GenerativeModel, thinking_level: ThinkingLevel | None
+def extract(  # noqa: PLR0913  # optional follow-up history and prior_facts preserve existing callers
+    message: str,
+    as_of: date,
+    generator: GenerativeModel,
+    thinking_level: ThinkingLevel | None,
+    *,
+    history: Sequence[Turn] = (),
+    prior_facts: StudentFacts | None = None,
 ) -> Extraction:
     """The student's facts, question and out-of-scope topics, as the generator reads them."""
-    return _generate(generator, _extraction_prompt(message, as_of), Extraction, thinking_level)
+    prompt = _extraction_prompt(message, as_of, history=history, prior_facts=prior_facts)
+    return _generate(generator, prompt, Extraction, thinking_level)
 
 
 def check_explanation(
@@ -524,8 +575,13 @@ def _with_cited(
     return (*extra, *hits)
 
 
-def _extraction_prompt(message: str, as_of: date) -> str:
-    return (
+def _extraction_prompt(
+    message: str,
+    as_of: date,
+    history: Sequence[Turn] = (),
+    prior_facts: StudentFacts | None = None,
+) -> str:
+    base = (
         "Extract facts from an F-1 student's message for a rules engine. Today is "
         f"{as_of.isoformat()}. Use ISO dates (YYYY-MM-DD) and resolve relative dates against "
         "today. Leave any fact the student did not state as null; never guess. List each job "
@@ -537,9 +593,34 @@ def _extraction_prompt(message: str, as_of: date) -> str:
         "restated question. List topics outside F-1 student rules in out_of_scope. Set kind to "
         "greeting for a greeting, thanks or a question about you, unrelated for a message with "
         "nothing to do with US immigration, visas, or studying or working in the US, and "
-        "question otherwise.\n\n"
-        f"Message:\n{message}"
+        "question otherwise."
     )
+    has_prior_facts = prior_facts is not None and states_facts(prior_facts)
+    recent = tuple(history[-MAX_HISTORY_TURNS:])
+    if not recent and not has_prior_facts:
+        return f"{base}\n\nMessage:\n{message}"
+
+    blocks = [
+        base,
+        "Follow-up context from earlier in this conversation is given below. Carry forward all "
+        "prior facts unless the student adds, corrects, or explicitly retracts them in the new "
+        "message. Rewrite question as a self-contained one-sentence question that resolves "
+        "pronouns or references (such as 'that deadline', 'it', or 'what if I...') using the "
+        "prior context. List out_of_scope topics for the new message only (do not carry over "
+        "out_of_scope topics from earlier turns).",
+    ]
+    if has_prior_facts and prior_facts is not None:
+        known_facts = prior_facts.model_dump(mode="json", exclude_none=True)
+        blocks.append(f"Prior facts:\n{json.dumps(known_facts, indent=1)}")
+    if recent:
+        turn_lines = []
+        for idx, turn in enumerate(recent, start=1):
+            turn_lines.append(f"Turn {idx} Q: {turn.question}")
+            if turn.answer:
+                turn_lines.append(f"Turn {idx} A: {turn.answer}")
+        blocks.append("Earlier turns:\n" + "\n".join(turn_lines))
+    blocks.append(f"Message:\n{message}")
+    return "\n\n".join(blocks)
 
 
 def _explanation_prompt(

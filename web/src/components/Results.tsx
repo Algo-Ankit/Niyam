@@ -25,15 +25,18 @@ interface Props {
   reply: Reply
   asOf: string
   sample: boolean
+  turnPrefix?: string
 }
 
-export function Results({ reply, asOf, sample }: Props) {
+export function Results({ reply, asOf, sample, turnPrefix = '' }: Props) {
   const [openCitation, setOpenCitation] = useState<string | null>(null)
 
   function showSource(citation: string) {
     setOpenCitation(citation)
     requestAnimationFrame(() =>
-      document.getElementById(sourceId(citation))?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      document
+        .getElementById(sourceId(citation, turnPrefix))
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
     )
   }
 
@@ -153,7 +156,7 @@ export function Results({ reply, asOf, sample }: Props) {
           provisions={reply.provisions}
           open={openCitation}
           onToggle={(c) => setOpenCitation((prev) => (prev === c ? null : c))}
-          idFor={sourceId}
+          idFor={(citation) => sourceId(citation, turnPrefix)}
         />
       </motion.div>
 
@@ -270,6 +273,6 @@ function FindingCard({ finding, onCite }: { finding: Finding; onCite: (c: string
   )
 }
 
-function sourceId(citation: string): string {
-  return `src-${citation.replace(/[^a-zA-Z0-9]+/g, '-')}`
+function sourceId(citation: string, prefix: string): string {
+  return `${prefix}src-${citation.replace(/[^a-zA-Z0-9]+/g, '-')}`
 }

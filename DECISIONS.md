@@ -743,3 +743,48 @@ Owner-approved on 2026-11-21.
 continuously without unsafe prompt self-modification or multi-hour eval reruns. *Tradeoff:* one
 extra `explain()` call on live verify failures under 25 s and automated bot commits to
 `data/learned_corrections.json` on `main` when all three gates pass.
+
+**D78. Support ephemeral in-page follow-up questions with 6-turn rolling context.**
+Owner-approved on 2026-11-21. Supersedes the v1 non-goal in `docs/PROJECT_CONTEXT.md` ("One
+message, one answer. No conversation history.") for the web UI and `POST /api/ask`.
+- **Concepts applied:**
+  - **Stateless client-carried context:** the browser retains recent conversation state (`turns`
+    and extracted `StudentFacts`) in React RAM and sends bounded context per `POST /api/ask`,
+    keeping serverless API instances completely stateless with zero server session storage.
+  - **Query contextualization (standalone question rewriting at `extract()`):** instead of feeding
+    prior assistant prose into `explain()`, `extract()` resolves references (`"that deadline"`,
+    `"what if..."`) into a self-contained question and updates `StudentFacts`, allowing `rules`,
+    `retrieve`, `rerank`, `explain`, and `verify` to remain stateless, single-turn, and strictly
+    grounded.
+- **Issues observed by owner:** after asking a question and receiving an answer, the assistant
+  forgot the previous question and stated facts so follow-up questions could not build on it, and
+  the single-answer UI had no conversation thread or follow-up input box below the answer.
+- **Decisions taken & design risks resolved:**
+  1. **Ephemeral React-memory storage only (vs. `sessionStorage` / server RAM):** conversation
+     turns live exclusively in React component state (`useState`) — never in `localStorage`,
+     `sessionStorage`, cookies, or server session storage — so successive follow-ups work across
+     stateless Vercel instances and all data clears immediately when reloading (`F5`) or leaving.
+  2. **6-turn rolling cap (`MAX_HISTORY_TURNS = 6`) & untrusted client payload bounds:** the
+     frontend sends at most the last 6 prior turns (`question` + verified `answer`, truncated to
+     500 / 1500 chars) plus the latest `prior_facts` (`StudentFacts`). FastAPI enforces these
+     bounds via Pydantic (`422` otherwise), never logs history to Langfuse, and never lets dates
+     from `history` enter `check_explanation()`'s allowed-date set.
+  3. **Contextualize at `extract()`, keep downstream stages & `fixed_reply` safe:**
+     `pipeline.answer()` and `pipeline.extract()` accept optional `history` and `prior_facts`
+     (defaulting empty so CLI and single-turn evals stay byte-for-byte identical). Letting
+     `extract()` output the full updated `StudentFacts` handles additions, corrections, and
+     retractions cleanly (transparent via `"What I understood"`), rather than a brittle code merge.
+     `_has_new_facts()` guards the `fixed_reply` shortcut so follow-up greetings (`"Thanks!"`)
+     with no newly changed facts still take the fast path while preserving `prior_facts`.
+  4. **Multi-turn web UI & edge-case isolation:** once a conversation starts, earlier turns
+     collapse into expandable Q&A cards above the latest expanded `<Results>` (with per-turn
+     prefixed citation DOM IDs `t{id}-src-...` so citation jump-links never scroll to the wrong
+     turn), and a follow-up `<AskForm>` with a **New conversation** reset button sits directly
+     below the latest answer. `"Watch a recorded answer"` (`sampleRun`) stays isolated from live
+     conversation state so recorded demo dates never leak into real follow-ups.
+*Why:* enables natural multi-turn follow-ups (adding missing dates, asking "what if…", checking
+additional rules) without adding server session state, database tables, extra LLM calls, or any
+relaxation of Niyam's deterministic date/citation guardrails. *Tradeoff:* all conversation state
+disappears on reload/navigation, follow-up fact carry-forward depends on `extract()` accuracy
+(kept transparent via `"What I understood"`), and every follow-up counts as 1 ask against the
+existing hourly/daily rate limits.

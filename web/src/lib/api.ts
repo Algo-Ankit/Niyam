@@ -1,4 +1,4 @@
-import { AskError, STAGES, type Reply, type Stage } from './types'
+import { AskError, STAGES, type HistoryTurn, type Reply, type Stage } from './types'
 
 const API = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
@@ -13,19 +13,30 @@ export async function fetchHealth(signal?: AbortSignal): Promise<Health> {
   return (await response.json()) as Health
 }
 
+export interface AskContext {
+  history: HistoryTurn[]
+  priorFacts: Record<string, unknown> | null
+}
+
 /** Asks the assistant; `onStage` fires as each pipeline stage finishes on the server. */
 export async function ask(
   message: string,
   asOf: string,
   onStage: (stage: Stage, ms: number) => void,
   signal: AbortSignal,
+  context?: AskContext,
 ): Promise<Reply> {
+  const payload: Record<string, unknown> = { message, as_of: asOf }
+  if (context && context.history.length > 0) {
+    payload.history = context.history
+    if (context.priorFacts) payload.prior_facts = context.priorFacts
+  }
   let response: Response
   try {
     response = await fetch(`${API}/api/ask`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, as_of: asOf }),
+      body: JSON.stringify(payload),
       signal,
     })
   } catch (error) {
