@@ -1,10 +1,13 @@
 """Command-line entry point: `uv run niyam <command>`."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import asdict
 from datetime import UTC, date, datetime
@@ -18,7 +21,7 @@ from niyam.config import get_settings
 from niyam.corpus import build, download
 from niyam.evals import answers as answers_eval
 from niyam.evals import edge as edge_eval
-from niyam.evals import end_to_end
+from niyam.evals import end_to_end, gate, report
 from niyam.evals import extraction as extraction_eval
 from niyam.evals import retrieval as retrieval_eval
 from niyam.models.factory import build_models
@@ -329,7 +332,40 @@ def _connect(*, autocommit: bool = False) -> psycopg.Connection:
     )
 
 
+def _eval_gate() -> int:
+    checks = gate.run_gate()
+    for check in checks:
+        status = "PASS" if check.passed else "FAIL"
+        print(f"{status}  {check.name}: {check.actual} ({check.requirement})")
+    passed = sum(check.passed for check in checks)
+    print(f"eval-gate: {passed}/{len(checks)} checks passed")
+    return 0 if passed == len(checks) else 1
+
+
+def _eval_report(output: Path, *, check: bool) -> int:
+    rendered = report.render_report()
+    if check:
+        if not output.exists():
+            print(f"{output} does not exist; run `uv run niyam eval-report`", file=sys.stderr)
+            return 1
+        existing = output.read_text(encoding="utf-8").replace("\r\n", "\n")
+        if existing != rendered:
+            print(f"{output} is out of date; run `uv run niyam eval-report`", file=sys.stderr)
+            return 1
+        print(f"{output} is up to date")
+        return 0
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(rendered, encoding="utf-8", newline="\n")
+    print(f"wrote {output} ({len(rendered.splitlines())} lines)")
+    return 0
+
+
 def main() -> None:
+    args = _build_parser().parse_args()
+    sys.exit(_dispatch(args))
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="niyam")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("verify-providers", help="make one live call to each provider")
@@ -338,6 +374,14 @@ def main() -> None:
     commands.add_parser("index", help="embed the processed corpus and load it into Postgres")
     search = commands.add_parser("search", help="search the indexed provisions")
     search.add_argument("query")
+    _add_eval_parsers(commands)
+    ask = commands.add_parser("ask", help="answer an F-1 student's question")
+    ask.add_argument("message")
+    ask.add_argument("--as-of", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD")
+    return parser
+
+
+def _add_eval_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     evaluate = commands.add_parser("eval-retrieval", help="score retrieval arms on an eval set")
     evaluate.add_argument("output", type=Path, help="where to save the raw JSON report")
     evaluate.add_argument("--set", type=Path, default=RETRIEVAL_DEV_SET, dest="eval_set")
@@ -354,30 +398,28 @@ def main() -> None:
     edge = commands.add_parser("eval-edge", help="score full replies on the independent sets")
     edge.add_argument("output", type=Path, help="where to save the raw JSON report")
     edge.add_argument("--set", type=Path, action="append", dest="sets", help="repeatable")
-    ask = commands.add_parser("ask", help="answer an F-1 student's question")
-    ask.add_argument("message")
-    ask.add_argument("--as-of", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD")
-    args = parser.parse_args()
+    commands.add_parser("eval-gate", help="verify frozen eval baselines and offline invariants")
+    rep = commands.add_parser("eval-report", help="generate docs/results.md from results/*.json")
+    rep.add_argument("output", nargs="?", type=Path, default=Path("docs/results.md"))
+    rep.add_argument("--check", action="store_true", help="fail if output differs from generated")
 
-    if args.command == "verify-providers":
-        sys.exit(_verify_providers())
-    if args.command == "corpus-fetch":
-        sys.exit(_corpus_fetch())
-    if args.command == "corpus-build":
-        sys.exit(_corpus_build())
-    if args.command == "index":
-        sys.exit(_index())
-    if args.command == "search":
-        sys.exit(_search(args.query))
-    if args.command == "eval-retrieval":
-        sys.exit(_eval_retrieval(args.output, args.eval_set, hyde=args.hyde, rerank=args.rerank))
-    if args.command == "eval-answers":
-        sys.exit(_eval_answers(args.output))
-    if args.command == "eval-pipeline":
-        sys.exit(_eval_pipeline(args.output))
-    if args.command == "eval-extraction":
-        sys.exit(_eval_extraction(args.output))
-    if args.command == "eval-edge":
-        sys.exit(_eval_edge(args.output, args.sets or list(EDGE_SETS)))
-    if args.command == "ask":
-        sys.exit(_ask(args.message, args.as_of))
+
+def _dispatch(args: argparse.Namespace) -> int:
+    handlers: dict[str, Callable[[], int]] = {
+        "verify-providers": _verify_providers,
+        "corpus-fetch": _corpus_fetch,
+        "corpus-build": _corpus_build,
+        "index": _index,
+        "search": lambda: _search(args.query),
+        "eval-retrieval": lambda: _eval_retrieval(
+            args.output, args.eval_set, hyde=args.hyde, rerank=args.rerank
+        ),
+        "eval-answers": lambda: _eval_answers(args.output),
+        "eval-pipeline": lambda: _eval_pipeline(args.output),
+        "eval-extraction": lambda: _eval_extraction(args.output),
+        "eval-edge": lambda: _eval_edge(args.output, args.sets or list(EDGE_SETS)),
+        "eval-gate": _eval_gate,
+        "eval-report": lambda: _eval_report(args.output, check=args.check),
+        "ask": lambda: _ask(args.message, args.as_of),
+    }
+    return handlers[str(args.command)]()

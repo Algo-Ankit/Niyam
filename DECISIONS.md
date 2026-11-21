@@ -679,3 +679,20 @@ hour is never reached by a person but still stops a script before it drains the 
 Gemini quota for everyone. *Tradeoff:* the limit is keyed on the public IP, so everyone behind
 one network (home wifi, an office) shares one 60; counts stay per server instance (D69). A
 login-based limit is planned later.
+
+**D75. Freeze R5–R15 as v1 baselines, verify offline with `niyam eval-gate`, and generate `docs/results.md`.**
+Owner-approved on 2026-11-21. `R5`–`R15` (`results/*.json`) are frozen as Niyam's v1 baselines so
+v1 ships without re-running multi-hour Gemini/Gemma evals; prompt, rules-engine, and gold-set
+improvements are deferred to v2. CI (`ci.yml`) runs `niyam eval-gate` (recomputing every metric
+from per-case rows in `results/*.json`, verifying saved summaries match, enforcing v1 regression
+floors including 100% `no_leak` and `asks_ok`, validating all 7 eval sets and indexed citations,
+and exercising `rules.opt.assess` across extraction and pipeline gold items) plus
+`niyam eval-report --check` against code-generated `docs/results.md`. A provisional automated
+audit (`R16`, `results/judge-audit-1.json` and `results/gold-audit-1.json`) documents inter-model
+agreement on 30 verdicts and gold findings across all 150 builder-written items, explicitly
+labelled pending owner spot-check.
+*Why:* `.state/` is gitignored and CI has no LLM or Postgres secrets (D68, D69), so an offline
+gate protects invariants, rules behavior, and committed baselines deterministically without
+consuming free-tier quota or hours of runtime. *Tradeoff:* CI cannot detect LLM prompt regressions
+until offline evals are re-run manually in v2, and the R16 audit is inter-model rather than human
+calibration until owner spot-check.

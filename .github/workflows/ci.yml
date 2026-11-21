@@ -1,4 +1,4 @@
-# Checks on every push and pull request (D68). No eval gate yet: eval baselines are unfinished.
+# Checks on every push and pull request (D68, D75): offline eval gate verifies frozen baselines.
 name: CI
 
 on:
@@ -36,6 +36,10 @@ jobs:
         run: .tools/bootstrap/bin/uv run --frozen mypy
       - name: Pytest
         run: .tools/bootstrap/bin/uv run --frozen pytest
+      - name: Eval regression gate
+        run: .tools/bootstrap/bin/uv run --frozen niyam eval-gate
+      - name: Verify docs/results.md
+        run: .tools/bootstrap/bin/uv run --frozen niyam eval-report --check
 
   # The website (D64, D66) is built in parallel; every step is skipped until web/package.json exists.
   web:
