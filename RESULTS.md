@@ -137,6 +137,25 @@ Format:
   response cache on; eval set evals/independent/h1b_cases.jsonl (70 cases, 1 run).
 - Raw output: results/edge-h1b-1.json
 
+## R12 2026-11-21 - Independent edge-cases eval (90 cases)
+- Value: passed 0.221 across 90 cases (judge_failed 4: x022, x045, x057, x061). Per-group pass
+  rates: category:adversarial 0.444 (9 cases, judge_failed 0); category:cap_gap 0.143 (9 cases,
+  judge_failed 2); category:date_boundaries 0.2 (15 cases, judge_failed 0);
+  category:messy_language 0.111 (9 cases, judge_failed 0); category:missing_or_contradictory_facts
+  0.143 (7 cases, judge_failed 0); category:scope_boundaries 0.0 (11 cases, judge_failed 0);
+  category:silent_regulation 0.125 (8 cases, judge_failed 0); category:stem_opt 0.25 (9 cases,
+  judge_failed 1); category:unemployment_counting 0.5 (13 cases, judge_failed 1); confidence:high
+  0.333 (46 cases, judge_failed 1); confidence:medium 0.091 (35 cases, judge_failed 2);
+  confidence:low 0.125 (9 cases, judge_failed 1); unambiguous 0.27 (66 cases, judge_failed 3);
+  ambiguous 0.087 (24 cases, judge_failed 1). Overall metrics: scope_ok 0.867, deadlines_ok
+  0.571, counts_ok 0.947, asks_ok 1.0, cites_gold 0.851, no_leak 1.0, says_required 0.326,
+  avoids_forbidden 0.942.
+- Produced by: `uv run niyam eval-edge results/edge-cases-1.json --set
+  evals/independent/edge_cases.jsonl` at commit 2640fdb
+- Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
+  response cache on; eval set evals/independent/edge_cases.jsonl (90 cases, 1 run).
+- Raw output: results/edge-cases-1.json
+
 ## R12 2026-11-20 - Retrieval held-out test split (35 questions), vector vs vector + rerank
 - Value: hit@1 / hit@3 / hit@5 / MRR@10. vector 0.886 / 0.943 / 0.943 / 0.917; vector+rerank
   1.000 / 1.000 / 1.000 / 1.000. Paired 95% bootstrap, rerank minus vector: hit@1 +0.114
@@ -149,3 +168,26 @@ Format:
 - Config: as R9 (gemini-embedding-2 768, vector top 10 reranked by gemini-decision-1, 2,000
   bootstrap resamples, seed 0). Set evals/retrieval-test.jsonl, builder-written.
 - Raw output: results/retrieval-test-rerank-1.json
+
+## R13 2026-11-21 - Independent edge-case eval (90 cases)
+- Value: passed 0.221 across 90 cases (judge_failed 4: x022, x045, x057, x061). Per-group pass
+  rates: category:adversarial 0.444 (9 cases, judge_failed 0); category:cap_gap 0.143 (9 cases,
+  judge_failed 2); category:date_boundaries 0.2 (15 cases, judge_failed 0);
+  category:messy_language 0.111 (9 cases, judge_failed 0);
+  category:missing_or_contradictory_facts 0.143 (7 cases, judge_failed 0);
+  category:scope_boundaries 0.0 (11 cases, judge_failed 0); category:silent_regulation 0.125
+  (8 cases, judge_failed 0); category:stem_opt 0.25 (9 cases, judge_failed 1);
+  category:unemployment_counting 0.5 (13 cases, judge_failed 1); confidence:high 0.333 (46 cases,
+  judge_failed 1); confidence:medium 0.091 (35 cases, judge_failed 2); confidence:low 0.125
+  (9 cases, judge_failed 1); unambiguous 0.27 (66 cases, judge_failed 3); ambiguous 0.087
+  (24 cases, judge_failed 1). Overall metrics: scope_ok 0.867, deadlines_ok 0.571, counts_ok
+  0.947, asks_ok 1.0, cites_gold 0.851, no_leak 1.0, says_required 0.326, avoids_forbidden 0.942.
+- Produced by: `uv run niyam eval-edge results/edge-cases-1.json --set
+  evals/independent/edge_cases.jsonl`, started 2026-11-21 13:17 IST with HEAD at c51193a (plus
+  the uncommitted D69 changes committed at 13:28). The report's `commit` field says 2640fdb
+  because `cli._commit()` reads HEAD when the report is written, 3.5 h later. Between c51193a and
+  D73 the only changes to code this eval runs are tracing flush and two deploy settings, so the
+  numbers measure the pipeline before D72 (routing) and D73 (timeout).
+- Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
+  response cache on; eval set evals/independent/edge_cases.jsonl (90 cases, 1 run).
+- Raw output: results/edge-cases-1.json
