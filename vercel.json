@@ -1,12 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm ci --prefix web && npm run build --prefix web -- --outDir ../public --emptyOutDir",
-  "functions": {
-    "src/niyam/asgi.py": {
-      "maxDuration": 60,
-      "excludeFiles": "{web/**,public/**,data/raw/**,data/processed/**,results/**,evals/**,tests/**,docs/**,scripts/**,notes/**}"
+  "services": {
+    "api": {
+      "root": ".",
+      "framework": "fastapi",
+      "entrypoint": "niyam.asgi:app",
+      "functions": {
+        "src/niyam/asgi.py": {
+          "maxDuration": 60,
+          "excludeFiles": "{web/**,data/raw/**,data/processed/**,results/**,evals/**,tests/**,docs/**,scripts/**,notes/**}"
+        }
+      }
+    },
+    "web": {
+      "root": "web",
+      "framework": "vite"
     }
   },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ],
   "headers": [
     {
       "source": "/(.*)",

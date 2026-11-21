@@ -614,3 +614,16 @@ API in seconds, on an account the owner already has. The published container kee
 portable to any container host. *Tradeoff:* ask limits and the response cache are per instance
 and reset when instances recycle, so they are approximate; Gemini's own free-tier quota remains
 the hard stop. Hobby is for personal, non-commercial use, which this project is.
+
+**D70. Deploy on Vercel as two Services, `api` and `web`.**
+Owner-approved on 2026-11-21. Supersedes the `public/` build step in D69 (the rest of D69
+stands). Vercel's importer detects the FastAPI app and the Vite site and requires the
+multi-service form of `vercel.json`: service `api` (root `.`, FastAPI, entrypoint
+`niyam.asgi:app`, 60 s `maxDuration`, dev and data folders excluded from the bundle) and
+service `web` (root `web`, Vite). Both are public: `/api/*` routes to `api`, everything else to
+`web`, on one domain. No service bindings: only the visitor's browser calls the API, and it
+uses the same origin.
+*Why:* it is the platform's supported layout for a frontend plus backend in one project; each
+service is built by its own framework preset instead of copying the site into the API's
+`public/` folder. *Tradeoff:* Services is a newer Vercel feature, so the first deploy is the
+real check of this configuration.
