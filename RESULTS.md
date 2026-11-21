@@ -203,3 +203,13 @@ Format:
   eval set evals/pipeline.jsonl (40 scenarios: 30 in_scope, 4 unanswerable, 6 out_of_scope;
   builder-written, judge uncalibrated).
 - Raw output: results/pipeline-1.json
+
+## R15 2026-11-21 - Answer quality on retrieval dev split given gold provisions (40 questions)
+- Value: answerable 0.875 (35 of 40); shown 1.0 (40 of 40); cites_gold 0.95 (38 of 40); correct
+  0.85 (34 of 40); grounded 0.95 (38 of 40). Incorrect: d01, d07, d12, d15, d31, d40 (four
+  false abstentions: d07, d12, d15, d31; d34 also set answerable=false while marked correct).
+- Produced by: `uv run niyam eval-answers results/answers-1.json` at commit f2d2a10
+- Config: generator gemini-3.5-flash-lite, thinking level low, judge gemma-4-31b-it, response
+  cache on; eval set evals/retrieval-dev.jsonl (40 questions with reference answers, gold and
+  context provisions passed directly, 1 run; builder-written, judge uncalibrated).
+- Raw output: results/answers-1.json

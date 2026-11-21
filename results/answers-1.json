@@ -1,0 +1,416 @@
+{
+ "run_at": "2026-11-21T12:49:42+00:00",
+ "commit": "f2d2a10",
+ "eval_set": "evals/retrieval-dev.jsonl",
+ "generation_model": "gemini-3.5-flash-lite",
+ "judge_model": "gemma-4-31b-it",
+ "summary": {
+  "answerable": 0.875,
+  "shown": 1.0,
+  "cites_gold": 0.95,
+  "correct": 0.85,
+  "grounded": 0.95
+ },
+ "scores": [
+  {
+   "id": "d01",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": false,
+   "grounded": true,
+   "judge_reason": "The assistant starts the answer with 'Yes', which directly contradicts the reference answer 'No' and the provision, as it answers the question 'Does my summer break count against my F-1 status' with a positive affirmation, meaning the break does count against the status.",
+   "answer": "Yes, an F-1 student is considered to be in status during the annual or summer vacation, provided the student is eligible and intends to register for the next term."
+  },
+  {
+   "id": "d02",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the credit limits for online classes and the exception for language study programs as stated in the reference and provisions.",
+   "answer": "For F-1 students, no more than the equivalent of one class or three credits per session, term, semester, trimester, or quarter may be counted toward the full course of study requirement if taken on-line or through distance education, provided the course does not require physical attendance. However, if your course of study is in a language study program, no on-line or distance education classes may be considered to count toward the full course of study requirement."
+  },
+  {
+   "id": "d03",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key facts and requirements from the reference answer and the provided provisions.",
+   "answer": "Yes, your DSO may authorize a reduced course load if you are experiencing an initial difficulty with the English language or reading requirements. However, you must resume a full course of study at the next available term, session, or semester (excluding a summer session) to maintain your student status."
+  },
+  {
+   "id": "d04",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provisions, including the 12-month aggregate limit and the requirement for medical documentation.",
+   "answer": "Yes, your Designated School Official (DSO) may authorize a reduced course load (or no course load) due to a temporary illness or medical condition. This can be authorized for an aggregate period of up to 12 months per program level. To qualify, you must provide medical documentation from a licensed medical doctor, doctor of osteopathy, psychologist, or clinical psychologist to your DSO. Additionally, you must provide current medical documentation and your DSO must reauthorize the reduced course load each new term, session, or semester."
+  },
+  {
+   "id": "d05",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provision regarding the authorization of a reduced course load in the final term.",
+   "answer": "Yes, a Designated School Official (DSO) may authorize a reduced course load during your final term, semester, or session if you need fewer courses to complete your course of study."
+  },
+  {
+   "id": "d06",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key facts from the reference answer and the provided provision.",
+   "answer": "Yes, you can be enrolled in two different SEVP-certified schools at the same time, provided that your combined enrollment equals a full course of study. The school granting your degree or certification will issue your Form I-20, handle updates and certifications, and manage all reporting to SEVP. If your programs have different requirements, such as credit hours versus clock hours, the Designated School Official (DSO) may determine what constitutes a full course of study."
+  },
+  {
+   "id": "d07",
+   "answerable": false,
+   "shown": true,
+   "cites_gold": true,
+   "correct": false,
+   "grounded": false,
+   "judge_reason": "The assistant claims the provisions do not answer the question, but the provided text explicitly states that USCIS may grant an extension if the student maintained status and the DSO issues a new Form I-20.",
+   "answer": "The provided provisions do not fully answer the question because they cut off before listing the specific requirements that must be established to grant an F-1 student an extension of stay."
+  },
+  {
+   "id": "d08",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately states the deadline for filing an extension of stay as required by the reference and provided provisions.",
+   "answer": "An extension of stay application is considered timely filed if the receipt date is on or before the date the authorized period of stay expires, which includes the 30-day period provided in paragraph (f)(5)(v) that is allowed after the completion of studies or any authorized practical training. USCIS must receive the application on or before the expiration of the authorized period of stay, including this 30-day period."
+  },
+  {
+   "id": "d09",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the time limit and conditions for resuming classes after transferring from OPT, matching both the reference and the provided provision.",
+   "answer": "If you are on post-completion or STEM OPT, you must be able to begin or resume classes within 5 months of transferring out of the school that recommended the OPT or the date the OPT authorization ends, whichever is earlier."
+  },
+  {
+   "id": "d10",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the steps mentioned in both the reference answer and the provided provision.",
+   "answer": "To transfer to another school, an F-1 student must first notify their current transfer-out school of their intent to transfer and specify the transfer-in school [8 CFR 214.2(f)(8)(ii)]. The current school will then update the student's record in SEVIS to indicate a transfer-out, the transfer-in school, and a release date [8 CFR 214.2(f)(8)(ii)]. Once the release date is reached, the transfer-in school gains full access to the student's SEVIS record and becomes responsible for the student [8 CFR 214.2(f)(8)(ii)]. Finally, the student should obtain a valid Form I-20 or successor form from the transfer-in school [8 CFR 214.2(f)(8)(ii)]."
+  },
+  {
+   "id": "d11",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer correctly states that working at the campus bookstore is allowed and supports this with the provided regulation.",
+   "answer": "Yes, you can work at the campus bookstore. On-campus employment includes work performed on the school's premises, which specifically encompasses on-location commercial firms that provide services for students on campus, such as the school bookstore."
+  },
+  {
+   "id": "d12",
+   "answerable": false,
+   "shown": true,
+   "cites_gold": false,
+   "correct": false,
+   "grounded": true,
+   "judge_reason": "The assistant failed to provide the answer found in the reference and the provided provisions, instead claiming the information was missing.",
+   "answer": "The provided provisions do not mention economic hardship authorization; they only discuss general part-time off-campus employment after one full academic year. Therefore, the exact hours allowed specifically for economic hardship authorization are missing."
+  },
+  {
+   "id": "d13",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant accurately reflects the reference answer and the provided provision, stating that the student can request authorization based on economic hardship due to currency fluctuations.",
+   "answer": "Yes, you can request off-campus employment work authorization based on severe economic hardship caused by unforeseen circumstances beyond your control, such as substantial fluctuations in the value of currency or exchange rate, if other employment opportunities are not available or are otherwise insufficient."
+  },
+  {
+   "id": "d14",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant correctly identifies the application process with USCIS and lists all required documents specified in the provision.",
+   "answer": "To get work authorization for an offer from a recognized international organization, you must apply for employment authorization with USCIS. You are required to present three things: a written certification from the international organization stating the employment is within the scope of their sponsorship, your Form I-20 with the employment page completed by your DSO certifying eligibility, and a completed Form I-765 along with the required fee."
+  },
+  {
+   "id": "d15",
+   "answerable": false,
+   "shown": true,
+   "cites_gold": false,
+   "correct": false,
+   "grounded": true,
+   "judge_reason": "The assistant claims the provisions do not mention OPT, but the provided provision explicitly allows employment during annual vacation and other times school is not in session for eligible students.",
+   "answer": "The provided provisions do not mention Optional Practical Training (OPT). Therefore, it is missing information on whether you can do OPT during your summer vacation."
+  },
+  {
+   "id": "d16",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the one full academic year requirement and the specific exception for graduate students requiring immediate CPT, matching both the reference and the provided provisions.",
+   "answer": "Generally, an F-1 student must be lawfully enrolled on a full-time basis in an approved SEVP-certified college, university, conservatory, or seminary for one full academic year before practical training may be authorized. However, exceptions to this one academic year requirement are provided for students enrolled in graduate studies that require immediate participation in curricular practical training."
+  },
+  {
+   "id": "d17",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provision.",
+   "answer": "Yes, you become eligible for another 12 months of practical training when you change to a higher educational level."
+  },
+  {
+   "id": "d18",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provision.",
+   "answer": "No, students enrolled in English language training programs are explicitly ineligible for practical training (OPT)."
+  },
+  {
+   "id": "d19",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key facts of the reference answer and the provided provision.",
+   "answer": "Yes, the U.S. educational institution that awarded the degree used as the basis for the 24-month OPT extension must be accredited by an accrediting agency recognized by the Department of Education at the time of application."
+  },
+  {
+   "id": "d20",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provision, confirming that the STEM OPT job must be directly related to the qualifying degree.",
+   "answer": "Yes, your STEM practical training opportunity must be directly related to the degree that qualifies you for the 24-month OPT extension."
+  },
+  {
+   "id": "d21",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided regulation regarding material changes to Form I-983 due to pay reduction.",
+   "answer": "Yes, you need to update your Form I-983. A reduction in compensation from the amount previously submitted on the Form I-983 that is not tied to a reduction in hours worked is considered a material change or deviation. In such cases, the student and employer must sign a modified Form I-983 and submit it to the student's DSO at the earliest available opportunity."
+  },
+  {
+   "id": "d22",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provisions.",
+   "answer": "No, your STEM OPT employer cannot use you to replace a U.S. worker. The regulations state that a student on a STEM OPT extension will not replace a full- or part-time, temporary or permanent U.S. worker."
+  },
+  {
+   "id": "d23",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key requirements for post-completion OPT as stated in the reference and provisions.",
+   "answer": "Yes, an F-1 student recommended for post-completion OPT must either apply for an extension of stay with USCIS or seek admission through CBP after travel abroad, in addition to applying for employment authorization."
+  },
+  {
+   "id": "d24",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key facts from both the reference answer and the provided provision.",
+   "answer": "The Designated School Official (DSO) must update your SEVIS record with their recommendation for OPT before you can apply to USCIS for employment authorization."
+  },
+  {
+   "id": "d25",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key fact from the reference and the provided provision regarding how an applicant finds out about their OPT approval.",
+   "answer": "USCIS will notify the applicant of the decision on the Form I-765 or successor form in writing."
+  },
+  {
+   "id": "d26",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the rules for readmission after a temporary absence of five months or less, as specified in the provided provisions.",
+   "answer": "Yes, an F-1 student returning from a temporary absence of five months or less may be readmitted to continue attendance at their school if they present either a current Form I-20 properly endorsed by the DSO for reentry if there is no substantive change, or an updated Form I-20 if there has been a substantive change in the information."
+  },
+  {
+   "id": "d27",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects all the requirements listed in thereference answer and the provided provision.",
+   "answer": "To re-enter the US while on post-completion OPT, you need an unexpired EAD issued for post-completion practical training, and you must be otherwise admissible to resume employment after a temporary absence. Additionally, your EAD must be used in combination with a Form I-20 (or successor form) that has been endorsed for reentry by your DSO within the last six months."
+  },
+  {
+   "id": "d28",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the requirement for readmission to the same school to resume employment, as stated in the reference and the provided provision.",
+   "answer": "If you are returning from a temporary trip abroad with an unexpired off-campus employment authorization on your Form I-20 or successor form, you may resume your employment provided you are readmitted to attend the same school that granted the employment authorization."
+  },
+  {
+   "id": "d29",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provision.",
+   "answer": "No, an F-2 spouse of an F-1 student may not accept employment in the US."
+  },
+  {
+   "id": "d30",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the rules for F-2 visa holders regarding part-time and avocational study versus full academic study, matching the reference answer and the provided regulations.",
+   "answer": "Yes, your wife on an F-2 visa can take classes. She may enroll in less than a full course of study at an SEVP-certified school [8 CFR 214.2(f)(15)(ii)(A)(1)]. Additionally, she may engage in study that is avocational or recreational in nature, up to and including on a full-time basis [8 CFR 214.2(f)(15)(ii)(A)(2)]. However, to engage in a full course of study (other than avocational or recreational study), she must apply for and obtain a change of status to F-1, M-1, or J-1 nonimmigrant status before beginning [8 CFR 214.2(f)(15)(ii)(A)(2)]."
+  },
+  {
+   "id": "d31",
+   "answerable": false,
+   "shown": true,
+   "cites_gold": true,
+   "correct": false,
+   "grounded": true,
+   "judge_reason": "The assistant failed to answer the question based on the available provisions, instead claiming it lacked sufficient details to provide a full answer.",
+   "answer": "The provided provisions do not contain all the necessary details to fully answer whether you can get reinstated, as they only describe the initial filing requirements and the five-month time limit, but are missing the complete list of conditions that USCIS requires to grant reinstatement."
+  },
+  {
+   "id": "d32",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key facts of the reference answer and the provided provision.",
+   "answer": "If you lose your current Form I-20, a replacement copy that contains the same information, including employment endorsements and notations, should be issued by your designated school official (DSO)."
+  },
+  {
+   "id": "d33",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the key facts of the reference answer and the provided provision, including the automatic suspension of authorization and the prohibition on transfers.",
+   "answer": "Yes, your employment authorization is automatically suspended if the Secretary of Labor or their designee certifies to the Secretary of Homeland Security that a strike or other labor dispute involving a work stoppage is in progress in your occupation at your place of employment. Additionally, your employer is prohibited from transferring F-1 students working at other facilities to the facility where the work stoppage is occurring."
+  },
+  {
+   "id": "d34",
+   "answerable": false,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant correctly identifies the conditions for the extension of status and employment authorization based on the provided provisions.",
+   "answer": "The provided provisions state that an F-1 student's status and employment authorization are automatically extended if they are the beneficiary of a timely filed, nonfrivolous H-1B petition requesting a change of status for the appropriate fiscal year [8 CFR 214.2(f)(5)(vii)(A), 8 CFR 214.2(f)(5)(vii)(A)(1), 8 CFR 214.2(f)(5)(vii)(A)(2), 8 CFR 214.2(f)(5)(vii)(A)(3)]. However, the computed findings do not contain any information about your specific H-1B petition, its filing status, or whether it requests a change of status. Therefore, it is missing the necessary facts to determine if your status is extended."
+  },
+  {
+   "id": "d35",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the reference answer and the provided provision, confirming that a student is in a period of authorized stay if a timely extension application is pending.",
+   "answer": "Yes, if your Form I-94 has expired but you have timely filed an extension of stay application, you will be considered to be in a period of authorized stay until USCIS issues a decision on your application [8 CFR 214.2(f)(5)(viii)]."
+  },
+  {
+   "id": "d36",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer exactly matches the reference answer and the provided provision.",
+   "answer": "The DSO must notify SEVIS within 21 days of the student's commencement of a full course of study."
+  },
+  {
+   "id": "d37",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant correctly identifies the 10-day reporting window and the parties to be notified, consistent with the reference and provisions.",
+   "answer": "If you are an F-1 student, you must report any change of address to DHS and your DSO within 10 days of the change, in the manner prescribed by your school. The address provided must be the actual physical location where you reside, except if you cannot receive mail there."
+  },
+  {
+   "id": "d38",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant's answer accurately reflects the 4-year limit and the possibility of additional time as stated in both the reference answer and the provided provision.",
+   "answer": "Yes, an F-1 student is admitted for a fixed period necessary to complete their course of study, not to exceed a period of 4 years, plus additional times and exceptions noted in the regulations, such as additional time to complete the program, begin a new program, or engage in post-completion OPT and STEM extensions [8 CFR 214.2(f)(5)(i)]."
+  },
+  {
+   "id": "d39",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": true,
+   "grounded": true,
+   "judge_reason": "The assistant correctly stated that undergraduates cannot change their major in the first year without an SEVP exception and provided accurate examples of extenuating circumstances from the provisions.",
+   "answer": "Generally, as an undergraduate student below the graduate degree level, you cannot change your major within your first academic year of a program of study. However, you may change your major during this time if an exception is authorized by SEVP for extenuating circumstances, which may include a school closure, a school's prolonged inability to hold in-person classes due to a natural disaster, a need to change schools to complete elementary or secondary education, or another cause."
+  },
+  {
+   "id": "d40",
+   "answerable": true,
+   "shown": true,
+   "cites_gold": true,
+   "correct": false,
+   "grounded": false,
+   "judge_reason": "The assistant claims the student 'can' start a second master's, which contradicts the provision stating that F-1 status cannot be provided for a program at the same educational level.",
+   "answer": "Yes, you can start a second master's degree, because a master's degree represents a higher educational level than a bachelor's, or you are moving to a different level. However, please note that under 8 CFR 214.2(f)(5)(ii)(C), an F-1 student who completes a program at one educational level may not receive F-1 status for another program at the same or a lower educational level."
+  }
+ ]
+}
