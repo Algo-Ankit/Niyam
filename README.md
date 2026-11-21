@@ -14,10 +14,12 @@ code checks the model's output before anyone sees it.
 
 > Information from 8 CFR 214.2(f), not legal advice. Confirm deadlines with your DSO.
 
-**Status:** in development. The assistant runs from the command line. Retrieval (with
-reranking), fact extraction, and the first independent decline/security evaluation (R10) have
-been measured. The remaining edge/H-1B/pipeline evaluations, prompt iterations, and web app
-are next. There is no public demo yet.
+**Live demo:** https://niyam-flame.vercel.app (free-tier models; "Watch a recorded answer"
+works even when the daily quota is used up).
+
+**Status:** in development. The web app, the `niyam ask` CLI and the API are live. Retrieval
+(with reranking), fact extraction, and the independent decline/security evaluation (R10) have
+been measured. The remaining pipeline evaluations and prompt iterations are next.
 
 ---
 
@@ -253,8 +255,10 @@ RESULTS.md            append-only measurement log (R1, R2, ...)
 - [x] Independent decline & security baseline evaluation (R10)
 - [ ] Run remaining independent/pipeline evals and calibrate the judge
 - [ ] Improve decline/referral completeness and adversarial citation retention over R10
-- [ ] Web app, Langfuse tracing and online evaluation
-- [ ] CI regression gate and a public deployment
+- [x] Web app (TypeScript) over a streaming API, with Langfuse tracing
+- [x] Public deployment on Vercel, CI, and a published container image
+- [ ] Online evaluation of live answers
+- [ ] CI regression gate on eval scores
 
 ## License
 

@@ -1,75 +1,74 @@
-# Deploy runbook (D68)
+# Deploy runbook (D68, D69, D70, D71)
 
-Recommended pairing: the API on **Render** (free web service, Docker) and the website on
-**Cloudflare Pages**. The browser calls the API directly, so CORS must list the site's origin.
-The host is the owner's decision (`docs/PROJECT_CONTEXT.md` section 13); nothing is deployed yet.
+Live at **https://niyam-flame.vercel.app**: one Vercel Hobby project with two Services
+(D70). `web` (Vite, root `web/`) serves the site; `api` (FastAPI, entrypoint
+`src.niyam.asgi:app`) serves `/api/*` on the same origin, so no CORS setup is needed. Every push
+to `main` redeploys both. The same API also ships as a container image (below) for any other host.
 
 ## Environment variables (names only)
 
-Set these on the host, never in the image. Required ones have no default in `src/niyam/config.py`.
+Set these in Vercel (Project > Settings > Environment Variables) or pass them to the container;
+never commit them. Required ones have no default in `src/niyam/config.py`.
 
 | Name | Required | Notes |
 |---|---|---|
 | `GEMINI_API_KEY` | yes | Secret. Free-tier key only (D35). |
-| `DATABASE_URL` | yes | Secret. Neon connection string (port 5432). |
-| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | yes | Secrets. |
-| `LANGFUSE_HOST` | no | |
+| `DATABASE_URL` | yes | Secret. Neon connection string. |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | yes | Secrets. `LANGFUSE_HOST` if not the default. |
+| `STATE_DIR` | Vercel: yes | `/tmp/niyam-state` on Vercel (only `/tmp` is writable). Image default `/app/.state`. |
+| `CLIENT_IP_HEADER` | Vercel: yes | `x-real-ip`. Vercel overwrites it with the client IP, so it cannot be spoofed (D69). |
+| `ASK_DEADLINE_SECONDS` | no | Default 50; keep below `maxDuration` (60) in `vercel.json` (D71). |
+| `DEMO_DAILY_CAP`, `ASKS_PER_IP_PER_HOUR` | no | D64 limits; per instance, so approximate on Vercel. |
+| `CORS_ORIGINS` | only cross-origin | JSON list; not needed on Vercel (same origin). |
 | `DECISION_PROVIDER`, `DECISION_BUDGET_USD` | no | Keep the budget at 0 (D21). |
-| `CORS_ORIGINS` | yes in production | JSON list, e.g. `["https://<project>.pages.dev"]`. |
-| `DEMO_DAILY_CAP`, `ASKS_PER_IP_PER_HOUR` | no | D64 limits. |
-| `FORWARDED_ALLOW_IPS` | no | Image default: private ranges and 127.0.0.1 (see below). |
-| `STATE_DIR` | no | Image default `/app/.state`; ephemeral on free hosts. |
-| `PORT` | no | Image default 8000; Render sets its own. |
+| `FORWARDED_ALLOW_IPS`, `PORT` | container only | See "Container" below. |
 
-## Build and run locally
+## Vercel (production)
+
+Set up once: import `Algo-Ankit/Niyam` at vercel.com/new (Application Preset "Services", read
+from `vercel.json`), add the variables above, deploy. After that, pushes deploy automatically.
+
+Checks after a deploy:
 
 ```bash
-docker build -t niyam-api .
-docker run --rm -p 8000:8000 --env-file .env niyam-api
-curl http://localhost:8000/api/health        # {"status":"ok","corpus_snapshot":"2026-10-15"}
+curl https://niyam-flame.vercel.app/api/health   # {"status":"ok","corpus_snapshot":"2026-10-15"}
 ```
 
-The image runs `uvicorn niyam.api:create_app --factory --host 0.0.0.0 --port $PORT --proxy-headers`
-as a non-root user. Only `pyproject.toml`, `uv.lock`, `README.md`, `src/` and `data/manifest.json`
-(the corpus snapshot date for `GET /api/health`) enter the image.
+Then ask one question on the site, or check Vercel's runtime logs for the `/api/ask` request.
 
-## Client IP behind the proxy
+Behaviour to expect:
+- Deployment Protection (Vercel Authentication) covers the generated per-deployment URLs; the
+  production domain `niyam-flame.vercel.app` is public.
+- Each ask runs in one function with `maxDuration` 60 s. Gemini overload (`503`) can make the
+  first step take 30 s or more; past `ASK_DEADLINE_SECONDS` the visitor gets the "busy" message
+  instead of a cut-off stream (D71).
+- The response cache and quota ledger live in `/tmp` and the ask limits in memory, all per
+  instance; they reset when instances recycle. Gemini's own free-tier limits remain the hard stop.
+- Langfuse traces are flushed after the reply is sent, before the stream closes (D69).
 
-The per-IP limit (D64) uses the address uvicorn derives from `X-Forwarded-For`. uvicorn trusts
-the header only when the TCP peer is in `FORWARDED_ALLOW_IPS`, and then takes the right-most
-address that is not itself trusted. Render appends the real client address and does not strip a
-client-supplied header, so `FORWARDED_ALLOW_IPS=*` would let a client spoof its IP (uvicorn then
-takes the left-most entry). The image therefore trusts only private ranges.
+## Container
 
-After the first deploy, check it: ask twice from one network and confirm the logs show your
-public IP rather than a 10.x address. If all clients appear as one proxy address, narrow
-`FORWARDED_ALLOW_IPS` to the peer address the logs show.
+CI builds the image on every push, starts it with dummy settings, checks `GET /api/health`
+(status, snapshot date) and the non-root user, and on `main` publishes it publicly:
 
-## Deploy the API on Render (owner steps)
+```bash
+docker pull ghcr.io/algo-ankit/niyam-api:latest
+docker run --rm -p 8000:8000 --env-file .env ghcr.io/algo-ankit/niyam-api:latest
+curl http://localhost:8000/api/health
+```
 
-1. Create a Render account (no card needed for free services) and connect the GitHub repo.
-2. New > Web Service > pick the repo; runtime **Docker**; instance type **Free**.
-3. Health check path: `/api/health`.
-4. Add the environment variables above as secrets.
-5. Deploy, then `curl https://<service>.onrender.com/api/health`.
+Tags: `latest` and `sha-<commit>`. The image runs
+`uvicorn niyam.api:create_app --factory --host 0.0.0.0 --port $PORT --proxy-headers` as a
+non-root user with a `HEALTHCHECK` on `/api/health`. Only `pyproject.toml`, `uv.lock`,
+`README.md`, `src/` and `data/manifest.json` enter the image.
 
-Free-tier behaviour to expect:
-- Sleeps after 15 minutes without traffic; the next request waits about a minute.
-- No persistent disk: `.state/` (response cache, quota ledger) and the in-memory ask limits
-  reset on every restart, including each wake from sleep. Gemini's own free-tier limits still
-  stop requests, and no spend is possible while `DECISION_BUDGET_USD` is 0 and the key is free tier.
-- 750 free instance hours per month per workspace.
-
-## Deploy the website on Cloudflare Pages (owner steps)
-
-1. Create a Cloudflare account and a Pages project connected to the repo.
-2. Root directory `web`, build command `npm run build`, output directory `dist`.
-3. Set the API base URL variable that the website defines (D66) to the Render URL.
-4. Add the Pages origin to the API's `CORS_ORIGINS` and redeploy the API.
+Behind a reverse proxy, the per-IP limit uses the address uvicorn derives from `X-Forwarded-For`.
+uvicorn trusts that header only from peers in `FORWARDED_ALLOW_IPS` (image default: private
+ranges and 127.0.0.1) and takes the right-most untrusted address; `FORWARDED_ALLOW_IPS=*` would
+let clients spoof their IP. Alternatively set `CLIENT_IP_HEADER` to a header the proxy overwrites.
 
 ## CI
 
-`.github/workflows/ci.yml` runs ruff, ruff format, mypy and pytest through
-`scripts/bootstrap.sh` on every push and pull request. The `web` job is skipped until
-`web/package.json` exists, then runs `npm ci`, lint and typecheck when those scripts exist, and
-`npm run build`. There is no eval gate yet.
+`.github/workflows/ci.yml` runs on every push and pull request: `python` (ruff, ruff format,
+mypy, pytest through `scripts/bootstrap.sh`), `web` (`npm ci`, typecheck, build) and `container`
+(build, smoke test, publish from `main`). There is no eval gate yet.
