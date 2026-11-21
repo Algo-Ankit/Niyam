@@ -191,3 +191,15 @@ Format:
 - Config: generator gemini-3.5-flash-lite, decision gemini-decision-1, judge gemma-4-31b-it,
   response cache on; eval set evals/independent/edge_cases.jsonl (90 cases, 1 run).
 - Raw output: results/edge-cases-1.json
+
+## R14 2026-11-21 - Whole-pipeline eval on 40 scenarios
+- Value: scope_correct 1.0 (40 of 40); deadlines_agree 1.0; in_scope_shown 0.933 (28 of 30);
+  in_scope_cites_gold 0.967 (29 of 30); in_scope_correct 0.9 (27 of 30); in_scope_grounded 0.933
+  (28 of 30); unanswerable_abstained 1.0 (4 of 4). Misses: p01 (withheld: word date May 15,
+  2026), p29 (withheld: bracketed citation), p20 (shown and grounded, judged incorrect).
+- Produced by: `uv run niyam eval-pipeline results/pipeline-1.json` at commit ba8267a
+- Config: generator gemini-3.5-flash-lite, thinking level low, decision gemini-decision-1,
+  judge gemma-4-31b-it, embedding gemini-embedding-2 (768), retrieval_k 5, response cache on;
+  eval set evals/pipeline.jsonl (40 scenarios: 30 in_scope, 4 unanswerable, 6 out_of_scope;
+  builder-written, judge uncalibrated).
+- Raw output: results/pipeline-1.json
