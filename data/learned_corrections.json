@@ -50,5 +50,19 @@
     "required_citations": [],
     "guidance": "Whenever declining any out-of-scope topic outside 8 CFR 214.2(f), explicitly state that it is outside 8 CFR 214.2(f) and refer the student to their DSO (designated school official) or a qualified immigration attorney.",
     "source_trace_id": null
+  },
+  {
+    "id": "lc-59ca36cbee42",
+    "keywords": [
+      "stem opt extension",
+      "foreign degree",
+      "stem qualifying degree",
+      "accreditation"
+    ],
+    "required_citations": [
+      "8 CFR 214.2(f)(10)(ii)(C)(1)"
+    ],
+    "guidance": "To qualify for the 24-month STEM OPT extension, the degree must be from a U.S. educational institution accredited by a recognized accrediting agency.",
+    "source_trace_id": "59ca36cbee4292c25cdf282dc580fe5e"
   }
 ]
